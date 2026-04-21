@@ -10,7 +10,7 @@ output-file: index.html
 ```{=html}
 <div class="build-tag" role="note">
   <span class="build-tag__label">Build</span>
-  <code class="build-tag__value">v7</code>
+  <code class="build-tag__value">v8</code>
 </div>
 <style>
   .build-tag {
@@ -201,20 +201,65 @@ print("Sonar package loaded successfully.")
 ```{ojs}
 //| echo: false
 viewof B = Inputs.range([100, 10000], {value: 4000, step: 100, label: "B (Hz)"})
+```
+```{ojs}
+//| echo: false
 md`Δr = c/(2B) = **${(1500/(2*B)).toFixed(2)} m**`
+```
+```{ojs}
+//| echo: false
 viewof tau = Inputs.range([0.01, 0.5], {value: 0.05, step: 0.005, label: "τ (s)"})
+```
+```{ojs}
+//| echo: false
 md`Bτ = **${(B*tau).toFixed(0)}**, MF gain = **${(10*Math.log10(B*tau)).toFixed(1)} dB**`
+```
+```{ojs}
+//| echo: false
 viewof R0 = Inputs.range([100, 5000], {value: 1500, step: 25, label: "R₀ (m)"})
-viewof v  = Inputs.range([-20, 20], {value: 5, step: 0.5, label: "v (m/s)"})
+```
+```{ojs}
+//| echo: false
+viewof v = Inputs.range([-20, 20], {value: 5, step: 0.5, label: "v (m/s)"})
+```
+```{ojs}
+//| echo: false
 viewof snr_in_dB = Inputs.range([-20, 20], {value: -5, step: 1, label: "SNR (dB)"})
+```
+```{ojs}
+//| echo: false
 viewof fc = Inputs.range([5000, 50000], {value: 20000, step: 1000, label: "fc (Hz)"})
+```
+```{ojs}
+//| echo: false
 viewof PRI = Inputs.range([0.0005, 0.02], {value: 0.002, step: 0.0005, label: "PRI (s)"})
+```
+```{ojs}
+//| echo: false
 N = 16
+```
+```{ojs}
+//| echo: false
 md`PRI = **${(PRI*1000).toFixed(2)} ms**, Δv = **${(1500/fc/(2*N*PRI)).toFixed(2)} m/s** (N=${N})`
+```
+```{ojs}
+//| echo: false
 viewof N_pulse = Inputs.select([1, 4, 16, 64], {value: 16, label: "N_pulse"})
+```
+```{ojs}
+//| echo: false
 viewof Pfa_log = Inputs.range([-6, -2], {value: -4, step: 0.5, label: "log₁₀ Pfa"})
+```
+```{ojs}
+//| echo: false
 Pfa = Math.pow(10, Pfa_log)
+```
+```{ojs}
+//| echo: false
 md`Design Pfa = **${Pfa.toExponential(1)}**`
+```
+```{ojs}
+//| echo: false
 viewof apply_mf = Inputs.toggle({value: true, label: "Apply matched filter"})
 ```
 
