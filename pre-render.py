@@ -1,31 +1,43 @@
 #!/usr/bin/env python3
-"""Bundle the local `sonar` package into a base64 JSON blob.
+"""Pre-render hook: stage the `sonar/` package into docs/ so quarto-live
+can fetch it at runtime.
 
-Quarto-live (0.1.x) does not yet auto-mount arbitrary resources into the
-Pyodide VFS, so we inline the package contents at render time and write
-them to the VFS from the first {pyodide} cell. This keeps the rendered
-HTML genuinely self-contained.
+Background: Pyodide cells run inside a Web Worker. The worker has no
+access to the DOM, so we can't inline the sonar files as a JSON blob and
+read them back with `document.getElementById`. Instead, we let quarto-
+live's `pyodide.resources:` mechanism fetch the files over HTTP (on the
+main thread) and write them into the worker's VFS. That means the files
+have to actually exist on the deployed site — which this script ensures
+by copying sonar/*.py into docs/sonar/ before render.
 """
 
 from __future__ import annotations
 
-import base64
-import json
 import pathlib
+import shutil
 
 ROOT = pathlib.Path(__file__).parent
-PKG = ROOT / "sonar"
+SRC = ROOT / "sonar"
+DST = ROOT / "docs" / "sonar"
 
-bundle: dict[str, str] = {}
-for path in sorted(PKG.rglob("*.py")):
-    rel = path.relative_to(ROOT).as_posix()
-    bundle[rel] = base64.b64encode(path.read_bytes()).decode("ascii")
+if DST.exists():
+    shutil.rmtree(DST)
+DST.mkdir(parents=True, exist_ok=True)
 
-snippet = (
-    '<script type="application/json" id="sonar-files">\n'
-    + json.dumps(bundle)
-    + "\n</script>\n"
-)
-out = ROOT / "_sonar_files.html"
-out.write_text(snippet)
-print(f"Bundled {len(bundle)} files into {out}")
+count = 0
+for path in sorted(SRC.rglob("*.py")):
+    rel = path.relative_to(SRC)
+    target = DST / rel
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(path, target)
+    count += 1
+
+# quarto-live's Lua `tree()` helper walks `sonar/` to build the vfs-file
+# resource list at render time. It pulls in `__pycache__/*.pyc` too,
+# which then 404 at runtime because we only copy *.py into docs/sonar/.
+# Easiest fix: remove pycache before render so the scan sees only *.py.
+for cache in SRC.rglob("__pycache__"):
+    if cache.is_dir():
+        shutil.rmtree(cache)
+
+print(f"Staged {count} sonar/*.py files into {DST}")

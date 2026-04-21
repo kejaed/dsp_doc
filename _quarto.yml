@@ -23,5 +23,7 @@ pyodide:
     - numpy
     - scipy
     - matplotlib
+  resources:
+    - sonar
   autorun: true
   show-startup-message: true

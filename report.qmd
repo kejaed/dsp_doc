@@ -7,12 +7,10 @@ engine: markdown
 output-file: index.html
 ---
 
-{{< include _sonar_files.html >}}
-
 ```{=html}
 <div class="build-tag" role="note">
   <span class="build-tag__label">Build</span>
-  <code class="build-tag__value">v3</code>
+  <code class="build-tag__value">v4</code>
 </div>
 <style>
   .build-tag {
@@ -107,6 +105,15 @@ document.addEventListener('DOMContentLoaded', function () {
   let t = 0;
   const tick = setInterval(function () {
     t += 1;
+    // Pyodide cells run in a Worker (no `window`), so we can't set a
+    // readiness flag from Python. Instead, watch for the setup cell's
+    // print output to appear in its container on the main thread.
+    if (!window.sonarReady) {
+      const cell1 = document.getElementById('pyodide-1');
+      if (cell1 && /sonar package mounted/.test(cell1.textContent || '')) {
+        window.sonarReady = true;
+      }
+    }
     if (window.sonarReady) {
       clearInterval(tick);
       el.classList.add('is-ready');
@@ -164,22 +171,14 @@ any normal CPython script — the *same* code that the `pytest` suite runs.
 #| autorun: true
 #| edit: false
 #| echo: false
-import base64, json, os, sys
-from js import document
+import sys
 
-# Pull the bundled sonar package out of the inline JSON blob.
-blob = document.getElementById("sonar-files").textContent
-files = json.loads(blob)
-
-ROOT = "/home/pyodide"
-for relpath, b64 in files.items():
-    full = os.path.join(ROOT, relpath)
-    os.makedirs(os.path.dirname(full), exist_ok=True)
-    with open(full, "wb") as fh:
-        fh.write(base64.b64decode(b64))
-
-if ROOT not in sys.path:
-    sys.path.insert(0, ROOT)
+# quarto-live's `pyodide.resources: [sonar]` fetches sonar/*.py on the
+# main thread and writes them into the Pyodide worker's VFS at paths
+# relative to cwd (/home/pyodide). Add that to sys.path so `import sonar`
+# finds the package we just mounted.
+if "/home/pyodide" not in sys.path:
+    sys.path.insert(0, "/home/pyodide")
 
 import numpy as np
 import matplotlib
@@ -187,13 +186,6 @@ matplotlib.use("AGG")
 import matplotlib.pyplot as plt
 import sonar
 print(f"sonar package mounted from {sonar.__file__}, c = {sonar.C_WATER} m/s")
-
-# Signal the loading banner that everything is up. The attribute name
-# intentionally avoids leading dunders because Pyodide's JsProxy filters
-# those from attribute writes on JS globals.
-from js import window as _js_window, console as _js_console
-_js_window.sonarReady = True
-_js_console.log("[sonar] setup cell complete, sonarReady=True")
 ```
 
 ## Controls
