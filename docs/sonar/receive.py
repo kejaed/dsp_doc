@@ -15,10 +15,16 @@ from scipy import signal
 def baseband_filter(
     x: np.ndarray, Fs: float, B: float, numtaps: int = 129
 ) -> np.ndarray:
-    """FIR lowpass that retains the chirp band at baseband."""
+    """FIR lowpass that retains the chirp band at baseband.
+
+    Uses direct convolution rather than fftconvolve: Pyodide's scipy
+    (1.14) has a pathological memory overshoot on fftconvolve with long
+    buffers that triggers "array is too big". np.convolve is O(N + M)
+    and fast enough for a 129-tap FIR.
+    """
     cutoff = min(0.49, max(B / Fs, 1e-3))
     h = signal.firwin(numtaps=numtaps, cutoff=cutoff, window="hamming")
-    return signal.fftconvolve(x, h, mode="same")
+    return np.convolve(x, h, mode="same")
 
 
 def quadrature_demod(x_passband: np.ndarray, Fs: float, fc: float, B: float) -> np.ndarray:

@@ -10,7 +10,7 @@ output-file: index.html
 ```{=html}
 <div class="build-tag" role="note">
   <span class="build-tag__label">Build</span>
-  <code class="build-tag__value">v5</code>
+  <code class="build-tag__value">v6</code>
 </div>
 <style>
   .build-tag {
@@ -110,16 +110,16 @@ document.addEventListener('DOMContentLoaded', function () {
     // print output to appear in its container on the main thread.
     if (!window.sonarReady) {
       const cell1 = document.getElementById('pyodide-1');
-      if (cell1 && /sonar package mounted/.test(cell1.textContent || '')) {
+      if (cell1 && /Sonar package loaded successfully/.test(cell1.textContent || '')) {
         window.sonarReady = true;
       }
     }
     if (window.sonarReady) {
       clearInterval(tick);
       el.classList.add('is-ready');
-      stage.textContent = 'Ready. Scroll down and start twiddling.';
-      setTimeout(function () { el.classList.add('is-hidden'); }, 1400);
-      setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 2400);
+      const title = el.querySelector('.pyo-loader__title');
+      if (title) title.textContent = 'Loaded successfully';
+      stage.textContent = 'Please use the doc! Drag the sliders and watch the figures redraw.';
       return;
     }
     // Prefer quarto-live's own status text while Pyodide is still booting.
@@ -188,7 +188,7 @@ import numpy as np
 # "FigureCanvasAgg is non-interactive" warning.
 import matplotlib.pyplot as plt
 import sonar
-print(f"sonar package mounted from {sonar.__file__}, c = {sonar.C_WATER} m/s")
+print("Sonar package loaded successfully.")
 ```
 
 ## Controls
@@ -217,9 +217,9 @@ viewof R0 = Inputs.range([100, 5000], {value: 1500, step: 25, label: "Target ran
 viewof v  = Inputs.range([-20, 20], {value: 5, step: 0.5, label: "Target velocity v (m/s)"})
 viewof snr_in_dB = Inputs.range([-20, 20], {value: -5, step: 1, label: "Input SNR (dB)"})
 viewof fc = Inputs.range([5000, 50000], {value: 20000, step: 1000, label: "Carrier fc (Hz)"})
-viewof PRI = Inputs.range([0.5, 4.0], {value: 1.5, step: 0.1, label: "PRI (s)"})
+viewof PRI = Inputs.range([0.0005, 0.02], {value: 0.002, step: 0.0005, label: "PRI (s)"})
 N = 16  // pulses used in the readout below; the integration knob lives in step 9
-md`**Doppler resolution Δv = λ/(2·N·PRI) = ${(1500/fc/(2*N*PRI)).toFixed(3)} m/s** (with N = ${N})`
+md`**PRI = ${(PRI*1000).toFixed(2)} ms**, **Doppler resolution Δv = λ/(2·N·PRI) = ${(1500/fc/(2*N*PRI)).toFixed(2)} m/s** (with N = ${N})`
 ```
 
 ### Detection
@@ -648,7 +648,7 @@ im = ax.imshow(rd_dB, origin="lower", aspect="auto", extent=extent,
 ax.scatter([r_axis[i_r]], [v_axis[i_v]], facecolors="none",
            edgecolors="red", s=120, lw=1.2, label="true target cell")
 ax.set_xlabel("range (m)"); ax.set_ylabel("radial velocity (m/s)")
-ax.set_title(f"range–Doppler map, N_pulse = {N_pulse_int}, PRI = {PRI:.1f} s")
+ax.set_title(f"range–Doppler map, N_pulse = {N_pulse_int}, PRI = {PRI*1000:.2f} ms")
 fig.colorbar(im, ax=ax, label="dB"); ax.legend(loc="upper right")
 plt.tight_layout(); plt.show()
 ```
@@ -716,6 +716,8 @@ ax.scatter(r_axis[ir_det], v_axis[iv_det], s=12, marker="x",
 ax.axvline(R0, color="w", ls=":", lw=0.7, alpha=0.6)
 ax.axhline(v,  color="w", ls=":", lw=0.7, alpha=0.6)
 ax.set_xlabel("range (m)"); ax.set_ylabel("radial velocity (m/s)")
+ax.set_xlim(r_axis[0], r_axis[-1])
+ax.set_ylim(v_axis[0], v_axis[-1])
 ax.set_title("RD map + CFAR detections")
 fig.colorbar(im, ax=ax, label="dB"); ax.legend(loc="upper right", fontsize=8)
 
