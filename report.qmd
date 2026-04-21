@@ -10,7 +10,7 @@ output-file: index.html
 ```{=html}
 <div class="build-tag" role="note">
   <span class="build-tag__label">Build</span>
-  <code class="build-tag__value">v12</code>
+  <code class="build-tag__value">v13</code>
 </div>
 <style>
   .build-tag {
@@ -199,6 +199,46 @@ print("Sonar package loaded successfully.")
 
 ## Controls
 
+```{=html}
+<div id="calc-status" class="calc-status calc-status--idle">
+  <span class="calc-status__dot" aria-hidden="true"></span>
+  <span class="calc-status__text">Waiting for first run…</span>
+</div>
+<style>
+  .calc-status {
+    display: flex; align-items: center; gap: 0.5rem;
+    padding: 0.4rem 0.5rem;
+    margin-bottom: 0.6rem;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    border: 1px solid transparent;
+    transition: background 0.2s, border-color 0.2s, color 0.2s;
+  }
+  .calc-status__dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: currentColor;
+    flex: 0 0 auto;
+    box-shadow: 0 0 0 3px rgba(0,0,0,0.04);
+  }
+  .calc-status--idle {
+    color: #6b7280; background: #f3f4f6; border-color: #e5e7eb;
+  }
+  .calc-status--running {
+    color: #b45309; background: #fef3c7; border-color: #fcd34d;
+  }
+  .calc-status--running .calc-status__dot {
+    animation: calc-pulse 0.9s ease-in-out infinite;
+  }
+  .calc-status--done {
+    color: #065f46; background: #d1fae5; border-color: #a7f3d0;
+  }
+  @keyframes calc-pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50%      { transform: scale(1.4); opacity: 0.55; }
+  }
+</style>
+```
+
 ```{ojs}
 //| echo: false
 commitOnRelease = (root) => {
@@ -303,20 +343,59 @@ _slider_log = {
 _pyodide_patch = {
   if (pyodideOjs && !pyodideOjs.__patched) {
     const original = pyodideOjs.process;
+    let pending = 0;
+    let done = 0;
+
+    const statusEl = document.getElementById('calc-status');
+    const textEl = statusEl && statusEl.querySelector('.calc-status__text');
+    const setStatus = (cls, msg) => {
+      if (!statusEl || !textEl) return;
+      statusEl.classList.remove(
+        'calc-status--idle', 'calc-status--running', 'calc-status--done'
+      );
+      statusEl.classList.add('calc-status--' + cls);
+      textEl.textContent = msg;
+    };
+
+    let settleTimer = null;
+    const scheduleDone = () => {
+      clearTimeout(settleTimer);
+      settleTimer = setTimeout(() => {
+        if (pending === 0) {
+          setStatus('done', `Calculations complete (${done} plot${done === 1 ? '' : 's'})`);
+        }
+      }, 150);
+    };
+
     pyodideOjs.process = function (ctx, inputs) {
-      const id = (ctx && ctx.options && ctx.options.id) || "?";
+      const id = (ctx && ctx.options && ctx.options.id) || '?';
+      pending += 1;
+      clearTimeout(settleTimer);
+      setStatus('running', `Running… (${pending} cell${pending === 1 ? '' : 's'} queued)`);
       console.log('[pyodide]', id, 'inputs:', inputs);
       const p = original.call(this, ctx, inputs);
+      const finalize = (ok, payload) => {
+        pending = Math.max(0, pending - 1);
+        if (ok) done += 1;
+        if (pending === 0) scheduleDone();
+        else setStatus('running', `Running… (${pending} cell${pending === 1 ? '' : 's'} left)`);
+      };
       p.then(
-        (container) => console.log('[pyodide-done]', id, 'children:',
-          container && container.childNodes && container.childNodes.length,
-          'html-len:', container && container.innerHTML && container.innerHTML.length),
-        (err) => console.error('[pyodide-error]', id, err)
+        (container) => {
+          console.log('[pyodide-done]', id, 'children:',
+            container && container.childNodes && container.childNodes.length,
+            'html-len:', container && container.innerHTML && container.innerHTML.length);
+          finalize(true, container);
+        },
+        (err) => {
+          console.error('[pyodide-error]', id, err);
+          finalize(false, err);
+        }
       );
       return p;
     };
     pyodideOjs.__patched = true;
-    console.log('[diag] pyodideOjs.process patched');
+    console.log('[diag] pyodideOjs.process patched (progress counter wired)');
   }
   return pyodideOjs;
 }
