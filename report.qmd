@@ -10,7 +10,7 @@ output-file: index.html
 ```{=html}
 <div class="build-tag" role="note">
   <span class="build-tag__label">Build</span>
-  <code class="build-tag__value">v10</code>
+  <code class="build-tag__value">v11</code>
 </div>
 <style>
   .build-tag {
@@ -269,7 +269,6 @@ viewof apply_mf = Inputs.toggle({value: true, label: "Apply matched filter"})
 ```{ojs}
 //| echo: false
 _slider_log = {
-  // Fires whenever any slider changes. Proves OJS observables are wired up.
   console.log("[slider]", {
     B, tau, R0, v, snr_in_dB, fc, PRI, N_pulse, Pfa_log, apply_mf
   });
@@ -277,33 +276,38 @@ _slider_log = {
 }
 ```
 
-```{=html}
-<script>
-// Instrument quarto-live's pyodideOjs.process so we see in the console
-// which pyodide cell re-runs when a slider moves. Has to wait for the
-// runtime to initialise before patching.
-(function () {
-  const patch = function () {
-    if (!window.pyodideOjs || window.pyodideOjs.__patched) return false;
-    const original = window.pyodideOjs.process;
-    if (typeof original !== 'function') return false;
-    window.pyodideOjs.process = function (ctx, inputs) {
+```{ojs}
+//| echo: false
+_pyodide_patch = {
+  // Wrap pyodideOjs.process at OJS scope (it's an OJS cell, not a
+  // window global) so every call logs. If [pyodide] fires on slider
+  // movement, the cell IS re-running; if not, the dependency chain
+  // never triggers evaluation.
+  if (pyodideOjs && !pyodideOjs.__patched) {
+    const original = pyodideOjs.process;
+    pyodideOjs.process = function (ctx, inputs) {
       try {
         const id = ctx && ctx.options && ctx.options.id;
         console.log('[pyodide]', id, 'inputs:', inputs);
       } catch (e) {}
       return original.call(this, ctx, inputs);
     };
-    window.pyodideOjs.__patched = true;
-    console.log('[diag] pyodideOjs.process instrumented');
-    return true;
-  };
-  if (!patch()) {
-    const iv = setInterval(function () { if (patch()) clearInterval(iv); }, 200);
-    setTimeout(function () { clearInterval(iv); }, 30000);
+    pyodideOjs.__patched = true;
+    console.log('[diag] pyodideOjs.process patched at OJS scope');
   }
-})();
-</script>
+  return pyodideOjs;
+}
+```
+
+```{ojs}
+//| echo: false
+_chain_test = {
+  // Force a dependency on the cell-5 OJS value plus all sliders. Fires
+  // iff OJS is re-running _pyodide_value_5 when B / R0 change.
+  const v5 = await _pyodide_value_5;
+  console.log('[chain] _pyodide_value_5 yielded', {B, R0}, v5);
+  return null;
+}
 ```
 
 
