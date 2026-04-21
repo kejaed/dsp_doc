@@ -10,7 +10,7 @@ output-file: index.html
 ```{=html}
 <div class="build-tag" role="note">
   <span class="build-tag__label">Build</span>
-  <code class="build-tag__value">v9</code>
+  <code class="build-tag__value">v10</code>
 </div>
 <style>
   .build-tag {

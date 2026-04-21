@@ -248,8 +248,15 @@ function PyodideCodeBlock(code)
     return {}
   end
 
-  -- Prepare OJS attributes
-  local input = "{" .. table.concat(block.attr.input or {}, ", ") .. "}"
+  -- Prepare OJS attributes. Emit `{B: B, tau: tau, ...}` instead of the
+  -- ES6 shorthand `{B, tau, ...}`: Observable's reactive parser in this
+  -- build does not register shorthand property names as cell
+  -- dependencies, so slider movement never triggered cell re-evaluation.
+  local pairs_list = {}
+  for _, name in ipairs(block.attr.input or {}) do
+    table.insert(pairs_list, name .. ": " .. name)
+  end
+  local input = "{" .. table.concat(pairs_list, ", ") .. "}"
   local ojs_vars = {
     block_id = block_id,
     block_input = input,
@@ -361,8 +368,15 @@ function WebRCodeBlock(code)
     return {}
   end
 
-  -- Prepare OJS attributes
-  local input = "{" .. table.concat(block.attr.input or {}, ", ") .. "}"
+  -- Prepare OJS attributes. Emit `{B: B, tau: tau, ...}` instead of the
+  -- ES6 shorthand `{B, tau, ...}`: Observable's reactive parser in this
+  -- build does not register shorthand property names as cell
+  -- dependencies, so slider movement never triggered cell re-evaluation.
+  local pairs_list = {}
+  for _, name in ipairs(block.attr.input or {}) do
+    table.insert(pairs_list, name .. ": " .. name)
+  end
+  local input = "{" .. table.concat(pairs_list, ", ") .. "}"
   local ojs_vars = {
     block_id = block_id,
     block_input = input,
