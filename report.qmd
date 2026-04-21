@@ -44,15 +44,36 @@ output-file: index.html
   @keyframes pyo-spin { to { transform: rotate(360deg); } }
 </style>
 <script>
+// Rewrite the engine-url to an absolute URL *before* quarto-live's OJS
+// setup reads the `pyodide-data` blob. quarto-live spawns the Pyodide
+// worker from a Blob URL, so a relative `./pyodide/` path resolves
+// against the unusable blob base and the runtime never loads. Running
+// on DOMContentLoaded means the data tag is already parsed.
+document.addEventListener('DOMContentLoaded', function () {
+  try {
+    const tag = document.querySelector('script[type="pyodide-data"]');
+    if (!tag) return;
+    const b64 = tag.textContent.trim();
+    const data = JSON.parse(atob(b64));
+    const idx = data && data.options && data.options.indexURL;
+    if (idx && !/^[a-z]+:\/\//i.test(idx) && !idx.startsWith('/')) {
+      data.options.indexURL = new URL(idx, document.baseURI).href;
+      tag.textContent = btoa(JSON.stringify(data));
+      console.log('[pyo-loader] indexURL rewritten to', data.options.indexURL);
+    }
+  } catch (e) {
+    console.error('[pyo-loader] engine-url rewrite failed', e);
+  }
+});
+
 (function () {
   const el = document.getElementById('pyo-loader');
   const stage = document.getElementById('pyo-loader-stage');
-  const stages = [
+  const fallback = [
     [0,  'Fetching Pyodide runtime (same-origin, no CDN)…'],
-    [5,  'Loading NumPy / SciPy / Matplotlib wheels…'],
-    [14, 'Mounting the sonar package into the Pyodide VFS…'],
-    [22, 'Running the first computation…'],
-    [40, 'Still booting — slow network or cold cache. Hang tight.'],
+    [8,  'Loading NumPy / SciPy / Matplotlib wheels…'],
+    [20, 'Mounting the sonar package…'],
+    [40, 'Still booting — slow network or cold cache. Check DevTools → Network.'],
   ];
   let t = 0;
   const tick = setInterval(function () {
@@ -65,8 +86,15 @@ output-file: index.html
       setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 2400);
       return;
     }
-    for (let i = stages.length - 1; i >= 0; i--) {
-      if (t >= stages[i][0]) { stage.textContent = stages[i][1]; break; }
+    // Prefer quarto-live's own status text if it's populated.
+    const live = document.getElementById('exercise-loading-status');
+    const liveText = live && live.textContent && live.textContent.trim();
+    if (liveText) {
+      stage.textContent = liveText;
+      return;
+    }
+    for (let i = fallback.length - 1; i >= 0; i--) {
+      if (t >= fallback[i][0]) { stage.textContent = fallback[i][1]; break; }
     }
   }, 1000);
 })();
