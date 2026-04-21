@@ -18,6 +18,7 @@ format:
     smooth-scroll: true
 
 pyodide:
+  engine-url: "./pyodide/"
   packages:
     - numpy
     - scipy

@@ -9,6 +9,70 @@ output-file: index.html
 
 {{< include _sonar_files.html >}}
 
+```{=html}
+<div id="pyo-loader" class="pyo-loader" role="status" aria-live="polite">
+  <div class="pyo-loader__spinner" aria-hidden="true"></div>
+  <div class="pyo-loader__body">
+    <div class="pyo-loader__title">Booting the Python runtime…</div>
+    <div class="pyo-loader__stage" id="pyo-loader-stage">Fetching Pyodide + scientific wheels (about 25 MB, cached after first visit).</div>
+  </div>
+</div>
+<style>
+  .pyo-loader {
+    position: sticky; top: 0; z-index: 1000;
+    display: flex; align-items: center; gap: 0.9rem;
+    padding: 0.7rem 1rem;
+    background: linear-gradient(135deg, #1f5fa8 0%, #2e7ab7 100%);
+    color: #fff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    font-size: 0.92rem;
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+  .pyo-loader__spinner {
+    width: 20px; height: 20px;
+    border: 3px solid rgba(255,255,255,0.35);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: pyo-spin 0.8s linear infinite;
+    flex: 0 0 auto;
+  }
+  .pyo-loader__title { font-weight: 600; line-height: 1.2; }
+  .pyo-loader__stage { font-size: 0.82rem; opacity: 0.92; margin-top: 0.1rem; }
+  .pyo-loader.is-ready { background: linear-gradient(135deg, #2d8a4b 0%, #3aa560 100%); }
+  .pyo-loader.is-ready .pyo-loader__spinner { border: 3px solid rgba(255,255,255,0.8); animation: none; }
+  .pyo-loader.is-hidden { opacity: 0; transform: translateY(-100%); pointer-events: none; }
+  @keyframes pyo-spin { to { transform: rotate(360deg); } }
+</style>
+<script>
+(function () {
+  const el = document.getElementById('pyo-loader');
+  const stage = document.getElementById('pyo-loader-stage');
+  const stages = [
+    [0,  'Fetching Pyodide runtime (same-origin, no CDN)…'],
+    [5,  'Loading NumPy / SciPy / Matplotlib wheels…'],
+    [14, 'Mounting the sonar package into the Pyodide VFS…'],
+    [22, 'Running the first computation…'],
+    [40, 'Still booting — slow network or cold cache. Hang tight.'],
+  ];
+  let t = 0;
+  const tick = setInterval(function () {
+    t += 1;
+    if (window.__sonarReady) {
+      clearInterval(tick);
+      el.classList.add('is-ready');
+      stage.textContent = 'Ready. Scroll down and start twiddling.';
+      setTimeout(function () { el.classList.add('is-hidden'); }, 1400);
+      setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 2400);
+      return;
+    }
+    for (let i = stages.length - 1; i >= 0; i--) {
+      if (t >= stages[i][0]) { stage.textContent = stages[i][1]; break; }
+    }
+  }, 1000);
+})();
+</script>
+```
+
 ## Abstract {.unnumbered}
 
 The DSP here is intentionally textbook — an LFM chirp, two-way spreading,
@@ -60,6 +124,10 @@ matplotlib.use("AGG")
 import matplotlib.pyplot as plt
 import sonar
 print(f"sonar package mounted from {sonar.__file__}, c = {sonar.C_WATER} m/s")
+
+# Signal the loading banner that everything is up.
+from js import window as _js_window
+_js_window.__sonarReady = True
 ```
 
 ## Controls
