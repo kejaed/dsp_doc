@@ -10,6 +10,35 @@ output-file: index.html
 {{< include _sonar_files.html >}}
 
 ```{=html}
+<div class="build-tag" role="note">
+  <span class="build-tag__label">Build</span>
+  <code class="build-tag__value">v1</code>
+</div>
+<style>
+  .build-tag {
+    font-size: 0.82rem;
+    color: #666;
+    margin: -0.4rem 0 1.1rem 0;
+    display: inline-flex;
+    gap: 0.4rem;
+    align-items: baseline;
+  }
+  .build-tag__label {
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+  }
+  .build-tag__value {
+    background: #f0f2f5;
+    padding: 1px 7px;
+    border-radius: 3px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #1a1a1a;
+  }
+</style>
+```
+
+```{=html}
 <div id="pyo-loader" class="pyo-loader" role="status" aria-live="polite">
   <div class="pyo-loader__spinner" aria-hidden="true"></div>
   <div class="pyo-loader__body">
