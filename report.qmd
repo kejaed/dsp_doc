@@ -10,7 +10,7 @@ output-file: index.html
 ```{=html}
 <div class="build-tag" role="note">
   <span class="build-tag__label">Build</span>
-  <code class="build-tag__value">v11</code>
+  <code class="build-tag__value">v12</code>
 </div>
 <style>
   .build-tag {
@@ -201,7 +201,29 @@ print("Sonar package loaded successfully.")
 
 ```{ojs}
 //| echo: false
-viewof B = Inputs.range([100, 10000], {value: 4000, step: 100, label: "B (Hz)"})
+commitOnRelease = (root) => {
+  // Native <input type=range> fires 'input' on every drag pixel and
+  // 'change' on mouse release. Observable Inputs listen to 'input', so
+  // cells re-evaluate nonstop while the user is dragging. This wrapper
+  // swallows 'input' events and synthesises a fresh 'input' event on
+  // 'change' so OJS only propagates the final committed value.
+  const slider = root.querySelector && root.querySelector("input[type=range]");
+  if (!slider) return root;
+  slider.addEventListener("input", (e) => {
+    if (!e.__committed) e.stopImmediatePropagation();
+  }, true);
+  slider.addEventListener("change", () => {
+    const ev = new Event("input", {bubbles: true});
+    ev.__committed = true;
+    slider.dispatchEvent(ev);
+  });
+  return root;
+}
+```
+
+```{ojs}
+//| echo: false
+viewof B = commitOnRelease(Inputs.range([100, 10000], {value: 4000, step: 100, label: "B (Hz)"}))
 ```
 ```{ojs}
 //| echo: false
@@ -209,7 +231,7 @@ md`Δr = c/(2B) = **${(1500/(2*B)).toFixed(2)} m**`
 ```
 ```{ojs}
 //| echo: false
-viewof tau = Inputs.range([0.01, 0.5], {value: 0.05, step: 0.005, label: "τ (s)"})
+viewof tau = commitOnRelease(Inputs.range([0.01, 0.5], {value: 0.05, step: 0.005, label: "τ (s)"}))
 ```
 ```{ojs}
 //| echo: false
@@ -217,23 +239,23 @@ md`Bτ = **${(B*tau).toFixed(0)}**, MF gain = **${(10*Math.log10(B*tau)).toFixed
 ```
 ```{ojs}
 //| echo: false
-viewof R0 = Inputs.range([100, 5000], {value: 1500, step: 25, label: "R₀ (m)"})
+viewof R0 = commitOnRelease(Inputs.range([100, 5000], {value: 1500, step: 25, label: "R₀ (m)"}))
 ```
 ```{ojs}
 //| echo: false
-viewof v = Inputs.range([-20, 20], {value: 5, step: 0.5, label: "v (m/s)"})
+viewof v = commitOnRelease(Inputs.range([-20, 20], {value: 5, step: 0.5, label: "v (m/s)"}))
 ```
 ```{ojs}
 //| echo: false
-viewof snr_in_dB = Inputs.range([-20, 20], {value: -5, step: 1, label: "SNR (dB)"})
+viewof snr_in_dB = commitOnRelease(Inputs.range([-20, 20], {value: -5, step: 1, label: "SNR (dB)"}))
 ```
 ```{ojs}
 //| echo: false
-viewof fc = Inputs.range([5000, 50000], {value: 20000, step: 1000, label: "fc (Hz)"})
+viewof fc = commitOnRelease(Inputs.range([5000, 50000], {value: 20000, step: 1000, label: "fc (Hz)"}))
 ```
 ```{ojs}
 //| echo: false
-viewof PRI = Inputs.range([0.0005, 0.02], {value: 0.002, step: 0.0005, label: "PRI (s)"})
+viewof PRI = commitOnRelease(Inputs.range([0.0005, 0.02], {value: 0.002, step: 0.0005, label: "PRI (s)"}))
 ```
 ```{ojs}
 //| echo: false
@@ -249,7 +271,7 @@ viewof N_pulse = Inputs.select([1, 4, 16, 64], {value: 16, label: "N_pulse"})
 ```
 ```{ojs}
 //| echo: false
-viewof Pfa_log = Inputs.range([-6, -2], {value: -4, step: 0.5, label: "log₁₀ Pfa"})
+viewof Pfa_log = commitOnRelease(Inputs.range([-6, -2], {value: -4, step: 0.5, label: "log₁₀ Pfa"}))
 ```
 ```{ojs}
 //| echo: false
@@ -279,21 +301,22 @@ _slider_log = {
 ```{ojs}
 //| echo: false
 _pyodide_patch = {
-  // Wrap pyodideOjs.process at OJS scope (it's an OJS cell, not a
-  // window global) so every call logs. If [pyodide] fires on slider
-  // movement, the cell IS re-running; if not, the dependency chain
-  // never triggers evaluation.
   if (pyodideOjs && !pyodideOjs.__patched) {
     const original = pyodideOjs.process;
     pyodideOjs.process = function (ctx, inputs) {
-      try {
-        const id = ctx && ctx.options && ctx.options.id;
-        console.log('[pyodide]', id, 'inputs:', inputs);
-      } catch (e) {}
-      return original.call(this, ctx, inputs);
+      const id = (ctx && ctx.options && ctx.options.id) || "?";
+      console.log('[pyodide]', id, 'inputs:', inputs);
+      const p = original.call(this, ctx, inputs);
+      p.then(
+        (container) => console.log('[pyodide-done]', id, 'children:',
+          container && container.childNodes && container.childNodes.length,
+          'html-len:', container && container.innerHTML && container.innerHTML.length),
+        (err) => console.error('[pyodide-error]', id, err)
+      );
+      return p;
     };
     pyodideOjs.__patched = true;
-    console.log('[diag] pyodideOjs.process patched at OJS scope');
+    console.log('[diag] pyodideOjs.process patched');
   }
   return pyodideOjs;
 }
@@ -302,11 +325,23 @@ _pyodide_patch = {
 ```{ojs}
 //| echo: false
 _chain_test = {
-  // Force a dependency on the cell-5 OJS value plus all sliders. Fires
-  // iff OJS is re-running _pyodide_value_5 when B / R0 change.
   const v5 = await _pyodide_value_5;
-  console.log('[chain] _pyodide_value_5 yielded', {B, R0}, v5);
+  console.log('[chain] _pyodide_value_5 yielded for', {B, R0}, v5);
   return null;
+}
+```
+
+```{ojs}
+//| echo: false
+_dom_observer = {
+  const el = document.getElementById('pyodide-5');
+  if (!el) { console.warn('[diag] no #pyodide-5 in DOM'); return null; }
+  const mo = new MutationObserver(list => {
+    console.log('[dom-5]', list.length, 'mutations', 'html-len:', el.innerHTML.length);
+  });
+  mo.observe(el, {childList: true, subtree: true, characterData: true});
+  console.log('[diag] MutationObserver attached to #pyodide-5');
+  return mo;
 }
 ```
 
