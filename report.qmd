@@ -10,7 +10,7 @@ output-file: index.html
 ```{=html}
 <div class="build-tag" role="note">
   <span class="build-tag__label">Build</span>
-  <code class="build-tag__value">v14</code>
+  <code class="build-tag__value">v15</code>
 </div>
 <style>
   .build-tag {
@@ -357,98 +357,52 @@ viewof apply_mf = Inputs.toggle({value: true, label: "Apply matched filter"})
 
 :::
 
-```{ojs}
-//| echo: false
-_slider_log = {
-  console.log("[slider]", {
-    B, tau, R0, v, snr_in_dB, fc, PRI, N_pulse, Pfa_log, apply_mf
-  });
-  return null;
-}
+```{=html}
+<script src="./plotly/plotly-cartesian.min.js"></script>
 ```
 
 ```{ojs}
 //| echo: false
-_pyodide_patch = {
-  if (pyodideOjs && !pyodideOjs.__patched) {
-    const original = pyodideOjs.process;
-    let pending = 0;       // cells currently executing
-    let batchTotal = 0;    // cells scheduled in the current batch
-    let batchDone = 0;     // cells that have resolved in the current batch
-
-    const statusEl = document.getElementById('calc-status');
-    const textEl = statusEl && statusEl.querySelector('.calc-status__text');
-    const setStatus = (cls, msg) => {
-      if (!statusEl || !textEl) return;
-      statusEl.classList.remove(
-        'calc-status--idle', 'calc-status--running', 'calc-status--done'
-      );
-      statusEl.classList.add('calc-status--' + cls);
-      textEl.textContent = msg;
-    };
-
-    pyodideOjs.process = function (ctx, inputs) {
-      const id = (ctx && ctx.options && ctx.options.id) || '?';
-      // A new batch starts every time we transition 0 -> non-zero pending.
-      if (pending === 0) {
-        batchTotal = 0;
-        batchDone = 0;
-      }
-      pending += 1;
-      batchTotal += 1;
-      setStatus('running', `Running… (${batchDone}/${batchTotal} plots)`);
-      console.log('[pyodide]', id, 'inputs:', inputs);
-      const p = original.call(this, ctx, inputs);
-      const finalize = (ok) => {
-        pending = Math.max(0, pending - 1);
-        if (ok) batchDone += 1;
-        if (pending === 0) {
-          setStatus('done', `Complete (${batchDone}/${batchTotal} plots)`);
-        } else {
-          setStatus('running', `Running… (${batchDone}/${batchTotal} plots)`);
-        }
-      };
-      p.then(
-        (container) => {
-          console.log('[pyodide-done]', id, 'children:',
-            container && container.childNodes && container.childNodes.length,
-            'html-len:', container && container.innerHTML && container.innerHTML.length);
-          finalize(true);
-        },
-        (err) => {
-          console.error('[pyodide-error]', id, err);
-          finalize(false);
-        }
-      );
-      return p;
-    };
-    pyodideOjs.__patched = true;
-    console.log('[diag] pyodideOjs.process patched (progress counter wired)');
-  }
-  return pyodideOjs;
-}
-```
-
-```{ojs}
-//| echo: false
-_chain_test = {
-  const v5 = await _pyodide_value_5;
-  console.log('[chain] _pyodide_value_5 yielded for', {B, R0}, v5);
-  return null;
-}
-```
-
-```{ojs}
-//| echo: false
-_dom_observer = {
-  const el = document.getElementById('pyodide-5');
-  if (!el) { console.warn('[diag] no #pyodide-5 in DOM'); return null; }
-  const mo = new MutationObserver(list => {
-    console.log('[dom-5]', list.length, 'mutations', 'html-len:', el.innerHTML.length);
-  });
-  mo.observe(el, {childList: true, subtree: true, characterData: true});
-  console.log('[diag] MutationObserver attached to #pyodide-5');
-  return mo;
+// pyRun: serialised Python execution tied to the calc-status pill.
+// Run a block of Python where the last expression must be a JSON
+// string; named OJS values are injected into Pyodide globals and the
+// parsed JSON is returned. All calls queue onto a single promise so
+// globals.set() cannot race between concurrent pyRun invocations.
+pyRun = {
+  let queue = Promise.resolve();
+  const statusEl = document.getElementById('calc-status');
+  const textEl = statusEl && statusEl.querySelector('.calc-status__text');
+  let pending = 0, total = 0, done = 0;
+  const setStatus = (cls, msg) => {
+    if (!statusEl || !textEl) return;
+    statusEl.classList.remove('calc-status--idle', 'calc-status--running', 'calc-status--done');
+    statusEl.classList.add('calc-status--' + cls);
+    textEl.textContent = msg;
+  };
+  const onStart = () => {
+    if (pending === 0) { total = 0; done = 0; }
+    pending += 1; total += 1;
+    setStatus('running', `Running… (${done}/${total} plots)`);
+  };
+  const onFinish = (ok) => {
+    pending = Math.max(0, pending - 1);
+    if (ok) done += 1;
+    if (pending === 0) setStatus('done', `Complete (${done}/${total} plots)`);
+    else setStatus('running', `Running… (${done}/${total} plots)`);
+  };
+  return (code, vars) => {
+    onStart();
+    const next = queue.then(async () => {
+      const p = await pyodideOjs.pyodidePromise;
+      for (const [k, v] of Object.entries(vars || {})) p.globals.set(k, v);
+      return p.runPythonAsync(code);
+    });
+    queue = next.catch(() => {});  // keep queue alive on error
+    return next.then(
+      (r) => { onFinish(true); return typeof r === 'string' ? JSON.parse(r) : r; },
+      (e) => { onFinish(false); throw e; }
+    );
+  };
 }
 ```
 
@@ -509,28 +463,67 @@ Instantaneous frequency sweeps linearly from 0 to $B$ over the pulse.
 The time–bandwidth product $B\tau$ is the only knob that matters here —
 it sets every downstream resolution number.
 
-```{pyodide}
-#| input: [B, tau, fc]
-#| min-lines: 8
-import numpy as np, matplotlib.pyplot as plt
+```{ojs}
+//| echo: false
+step1_data = await pyRun(`
+import json, numpy as np
 from sonar.waveform import lfm_chirp
-
-Fs = max(4 * B, 2 * fc)        # comfortable oversampling
-t, s = lfm_chirp(B, tau, Fs)
-
-fig, axes = plt.subplots(2, 1, figsize=(8, 4.2))
-axes[0].plot(t * 1e3, s.real, lw=0.6)
-axes[0].set_xlabel("time (ms)"); axes[0].set_ylabel("Re s(t)")
-axes[0].set_title(f"LFM chirp, Bτ = {B*tau:.0f}")
-
-# spectrogram (real part, plotted at the chosen carrier for visual context)
 from scipy.signal import spectrogram
-nperseg = min(256, max(32, len(s) // 16))
-f, tt, Sxx = spectrogram(s.real, Fs, nperseg=nperseg, noverlap=nperseg // 2)
-axes[1].pcolormesh(tt * 1e3, f * 1e-3, 10 * np.log10(Sxx + 1e-12), shading="auto")
-axes[1].set_xlabel("time (ms)"); axes[1].set_ylabel("freq (kHz)")
-axes[1].set_title("spectrogram of Re s(t)")
-plt.tight_layout(); plt.show()
+Fs = max(4 * B, 2 * fc)
+t, s = lfm_chirp(B, tau, Fs)
+# downsample waveform for plotting
+step = max(1, s.size // 4000)
+tt_wave = (t[::step] * 1e3).tolist()
+re_wave = s.real[::step].tolist()
+nperseg = min(256, max(32, s.size // 16))
+f_spec, t_spec, Sxx = spectrogram(s.real, Fs, nperseg=nperseg, noverlap=nperseg // 2)
+Sxx_dB = 10.0 * np.log10(Sxx + 1e-12)
+json.dumps({
+  "tt_wave": tt_wave, "re_wave": re_wave,
+  "spec_t_ms": (t_spec * 1e3).tolist(),
+  "spec_f_kHz": (f_spec / 1e3).tolist(),
+  "spec_dB": Sxx_dB.tolist(),
+  "Bt": float(B * tau),
+})
+`, {B, tau, fc})
+```
+
+```{ojs}
+//| echo: false
+step1_waveform = Plot.plot({
+  width: 720, height: 200,
+  marginLeft: 55, marginBottom: 38,
+  x: {label: "time (ms)", grid: true},
+  y: {label: "Re s(t)", grid: true},
+  marks: [
+    Plot.ruleY([0], {stroke: "#ddd"}),
+    Plot.line(step1_data.tt_wave.map((t, i) => ({t, y: step1_data.re_wave[i]})),
+              {x: "t", y: "y", stroke: "steelblue", strokeWidth: 0.7}),
+  ],
+  caption: `LFM chirp, Bτ = ${step1_data.Bt.toFixed(0)}`,
+})
+```
+
+```{ojs}
+//| echo: false
+step1_spec = {
+  const d = step1_data;
+  const div = html`<div style="width:100%;height:240px"></div>`;
+  const zmax = Math.max(...d.spec_dB.flat());
+  Plotly.newPlot(div, [{
+    type: "heatmap",
+    z: d.spec_dB, x: d.spec_t_ms, y: d.spec_f_kHz,
+    colorscale: "Viridis", zmin: zmax - 50, zmax: zmax,
+    colorbar: {title: "dB", thickness: 10},
+    hovertemplate: "t=%{x:.2f} ms<br>f=%{y:.2f} kHz<br>%{z:.1f} dB<extra></extra>",
+  }], {
+    margin: {l: 55, r: 10, t: 30, b: 38},
+    xaxis: {title: "time (ms)"},
+    yaxis: {title: "freq (kHz)"},
+    title: {text: "spectrogram of Re s(t)", font: {size: 13}},
+  }, {displayModeBar: false, responsive: true});
+  return div;
+}
 ```
 
 ## Step 2 — Two-way propagation loss
@@ -539,20 +532,40 @@ Spherical spreading + Thorp absorption gives one-way TL of
 $\mathrm{TL}(R, f) = 20\log_{10}R + \alpha(f)\,R\cdot 10^{-3}$ dB,
 with Thorp's coefficient $\alpha$ in dB/km. The two-way loss is just $2\,\mathrm{TL}$.
 
-```{pyodide}
-#| input: [fc]
-import numpy as np, matplotlib.pyplot as plt
+```{ojs}
+//| echo: false
+step2_data = await pyRun(`
+import json, numpy as np
 from sonar.propagation import transmission_loss, two_way_loss, thorp_absorption
+R = np.logspace(1, 4, 400)
+json.dumps({
+  "R": R.tolist(),
+  "one_way": transmission_loss(R, fc).tolist(),
+  "two_way": two_way_loss(R, fc).tolist(),
+  "alpha": float(thorp_absorption(fc)),
+  "fc_kHz": float(fc) / 1e3,
+})
+`, {fc})
+```
 
-R = np.logspace(1, 4, 400)  # 10 m → 10 km
-fig, ax1 = plt.subplots(figsize=(8, 3.2))
-ax1.semilogx(R, transmission_loss(R, fc), label="one-way TL")
-ax1.semilogx(R, two_way_loss(R, fc), label="two-way 2·TL")
-ax1.set_xlabel("range (m)"); ax1.set_ylabel("loss (dB)")
-ax1.set_title(f"propagation loss at fc = {fc/1e3:.1f} kHz, "
-              f"α = {thorp_absorption(fc):.2f} dB/km")
-ax1.grid(True, which="both", alpha=0.3); ax1.legend()
-plt.tight_layout(); plt.show()
+```{ojs}
+//| echo: false
+step2_plot = {
+  const d = step2_data;
+  const rows = d.R.flatMap((R, i) => [
+    {R, loss: d.one_way[i], kind: "one-way TL"},
+    {R, loss: d.two_way[i], kind: "two-way 2·TL"},
+  ]);
+  return Plot.plot({
+    width: 720, height: 240,
+    marginLeft: 55, marginBottom: 38,
+    x: {label: "range (m)", type: "log", grid: true},
+    y: {label: "loss (dB)", grid: true},
+    color: {legend: true, domain: ["one-way TL", "two-way 2·TL"]},
+    marks: [Plot.line(rows, {x: "R", y: "loss", stroke: "kind", strokeWidth: 1.3})],
+    caption: `propagation loss at fc = ${d.fc_kHz.toFixed(1)} kHz, α = ${d.alpha.toFixed(2)} dB/km`,
+  });
+}
 ```
 
 ## Step 3 — Target echo
@@ -566,26 +579,48 @@ $$
 \text{level} = \text{SL} - 2\,\mathrm{TL}(R_0, f_c) + \text{TS}.
 $$ {#eq-radareqn}
 
-```{pyodide}
-#| input: [B, tau, fc, R0, v]
-import numpy as np, matplotlib.pyplot as plt
+```{ojs}
+//| echo: false
+step3_data = await pyRun(`
+import json, numpy as np
 from sonar.waveform import lfm_chirp
 from sonar.targets import Target, echo
 from sonar import C_WATER
-
 Fs = max(4 * B, 2 * fc)
 _, s = lfm_chirp(B, tau, Fs)
-target = Target(R0_m=R0, v_mps=v, TS_dB=-15.0)
-y = echo(s, Fs, fc, target, SL_dB=200.0)
-
+tgt = Target(R0_m=R0, v_mps=v, TS_dB=-15.0)
+y = echo(s, Fs, fc, tgt, SL_dB=200.0)
 t = np.arange(y.size) / Fs
-fig, ax = plt.subplots(figsize=(8, 3.0))
-ax.plot(t, y.real, lw=0.5)
-tau_d = 2 * R0 / C_WATER
-ax.axvline(tau_d, color="r", ls="--", lw=1, label=f"τ_d = 2R₀/c = {tau_d*1e3:.1f} ms")
-ax.set_xlabel("time since transmit (s)"); ax.set_ylabel("Re y(t)")
-ax.set_title(f"echo from target at {R0:.0f} m, v = {v:.1f} m/s")
-ax.legend(); plt.tight_layout(); plt.show()
+step = max(1, y.size // 4000)
+json.dumps({
+  "t": t[::step].tolist(), "y_real": y.real[::step].tolist(),
+  "tau_d": float(2 * R0 / C_WATER),
+  "R0": float(R0), "v": float(v),
+})
+`, {B, tau, fc, R0, v})
+```
+
+```{ojs}
+//| echo: false
+step3_plot = {
+  const d = step3_data;
+  const pts = d.t.map((t, i) => ({t, y: d.y_real[i]}));
+  return Plot.plot({
+    width: 720, height: 230,
+    marginLeft: 60, marginBottom: 38,
+    x: {label: "time since transmit (s)", grid: true},
+    y: {label: "Re y(t)", grid: true},
+    marks: [
+      Plot.ruleY([0], {stroke: "#ddd"}),
+      Plot.line(pts, {x: "t", y: "y", stroke: "steelblue", strokeWidth: 0.7}),
+      Plot.ruleX([d.tau_d], {stroke: "#c0392b", strokeDasharray: "4 3"}),
+      Plot.text([{x: d.tau_d, y: 0}],
+        {x: "x", y: "y", text: [`τ_d = ${(d.tau_d*1e3).toFixed(1)} ms`],
+         fill: "#c0392b", dx: 4, dy: -6, textAnchor: "start", fontSize: 10}),
+    ],
+    caption: `echo from target at ${d.R0.toFixed(0)} m, v = ${d.v.toFixed(1)} m/s`,
+  });
+}
 ```
 
 ## Step 4 — Reverberation
@@ -595,23 +630,40 @@ exponentially decaying envelope, bandlimited to the chirp band. We don't
 attempt physical levels — just enough structure to put a realistic
 clutter floor under the matched-filter peak.
 
-```{pyodide}
-#| input: [B, tau, fc, R0]
-import numpy as np, matplotlib.pyplot as plt
+```{ojs}
+//| echo: false
+step4_data = await pyRun(`
+import json, numpy as np
 from sonar.reverberation import reverberation
 from sonar import C_WATER
-
 Fs = max(4 * B, 2 * fc)
-n = int(2.5 * 2 * R0 / C_WATER * Fs) + 8192   # span past the target
+n = min(int(2.5 * 2 * R0 / C_WATER * Fs) + 8192, 16384)
 rng = np.random.default_rng(0)
 r = reverberation(n, Fs, B, decay_tau_s=0.4, rev_level=1.0, rng=rng)
-
 t = np.arange(n) / Fs
-fig, ax = plt.subplots(figsize=(8, 3.0))
-ax.plot(t, np.abs(r), lw=0.4)
-ax.set_xlabel("time (s)"); ax.set_ylabel("|reverb|")
-ax.set_title(f"reverberation envelope, B = {B:.0f} Hz")
-plt.tight_layout(); plt.show()
+step = max(1, n // 4000)
+json.dumps({
+  "t": t[::step].tolist(),
+  "env": np.abs(r)[::step].tolist(),
+  "B": float(B),
+})
+`, {B, tau, fc, R0})
+```
+
+```{ojs}
+//| echo: false
+step4_plot = {
+  const d = step4_data;
+  const pts = d.t.map((t, i) => ({t, y: d.env[i]}));
+  return Plot.plot({
+    width: 720, height: 220,
+    marginLeft: 55, marginBottom: 38,
+    x: {label: "time (s)", grid: true},
+    y: {label: "|reverb|", grid: true},
+    marks: [Plot.line(pts, {x: "t", y: "y", stroke: "#555", strokeWidth: 0.5})],
+    caption: `reverberation envelope, B = ${d.B.toFixed(0)} Hz`,
+  });
+}
 ```
 
 ## Step 5 — Additive noise + composite received signal
@@ -620,33 +672,25 @@ Round it out with white complex-Gaussian noise. The total received signal
 is $x(t) = y_\text{echo}(t) + r(t) + n(t)$, with the noise level set so
 that the input SNR (relative to the echo) matches the slider.
 
-```{pyodide}
-#| input: [B, tau, fc, R0, v, snr_in_dB]
-import numpy as np, matplotlib.pyplot as plt
+```{ojs}
+//| echo: false
+step5_data = await pyRun(`
+import json, numpy as np
 from sonar.waveform import lfm_chirp
 from sonar.targets import Target, echo
 from sonar.reverberation import reverberation
 from sonar.noise import white_noise, noise_sigma_for_snr
 from sonar import C_WATER
-
-# Cap signal length for the PSD view. The scene buffer is only used for
-# PSD estimation here; no need to carry the full multi-ping timebase.
 Fs = max(4 * B, 2 * fc)
 _, s = lfm_chirp(B, tau, Fs)
 n_total = min(int(2.0 * R0 / C_WATER * Fs) + 8192, 16384)
-
-target = Target(R0_m=R0, v_mps=v, TS_dB=-15.0)
-y_e = echo(s, Fs, fc, target, SL_dB=200.0, n_out=n_total)
-
+tgt = Target(R0_m=R0, v_mps=v, TS_dB=-15.0)
+y_e = echo(s, Fs, fc, tgt, SL_dB=200.0, n_out=n_total)
 rng = np.random.default_rng(1)
 y_r = reverberation(n_total, Fs, B, decay_tau_s=0.2, rev_level=1e8, rng=rng)
 sig_pwr = np.mean(np.abs(y_e[y_e != 0]) ** 2) if np.any(y_e != 0) else 1.0
-sigma = noise_sigma_for_snr(sig_pwr, snr_in_dB)
-y_n = white_noise(n_total, sigma, rng=rng)
+y_n = white_noise(n_total, noise_sigma_for_snr(sig_pwr, snr_in_dB), rng=rng)
 x = y_e + y_r + y_n
-
-# Single-FFT periodogram, Hann-windowed. Cheap on memory (no segments,
-# no scipy.signal.welch allocations that misbehave in Pyodide's scipy).
 w = np.hanning(n_total)
 def psd(z):
     Z = np.fft.fft(z * w)
@@ -656,17 +700,41 @@ Pxx = np.fft.fftshift(psd(x))
 Pee = np.fft.fftshift(psd(y_e))
 Prr = np.fft.fftshift(psd(y_r))
 Pnn = np.fft.fftshift(psd(y_n))
+# downsample PSD for plotting
+step = max(1, f.size // 2048)
+def dB(p): return (10*np.log10(p + 1e-30))[::step].tolist()
+json.dumps({
+  "f_kHz": (f[::step] / 1e3).tolist(),
+  "x": dB(Pxx), "e": dB(Pee), "r": dB(Prr), "n": dB(Pnn),
+  "snr_in_dB": float(snr_in_dB),
+  "Fs_kHz": float(Fs) / 1e3,
+})
+`, {B, tau, fc, R0, v, snr_in_dB})
+```
 
-fig, ax = plt.subplots(figsize=(8, 3.5))
-ax.plot(f/1e3, 10*np.log10(Pxx + 1e-30), label="received x")
-ax.plot(f/1e3, 10*np.log10(Pee + 1e-30), label="echo only", alpha=0.7)
-ax.plot(f/1e3, 10*np.log10(Prr + 1e-30), label="reverb only", alpha=0.7)
-ax.plot(f/1e3, 10*np.log10(Pnn + 1e-30), label="noise only", alpha=0.7)
-ax.set_xlim(-Fs/2/1e3, Fs/2/1e3)
-ax.set_xlabel("baseband freq (kHz)"); ax.set_ylabel("PSD (dB)")
-ax.set_title(f"received PSD, input SNR = {snr_in_dB:.0f} dB")
-ax.legend(loc="lower center", ncols=4, fontsize=8); ax.grid(alpha=0.3)
-plt.tight_layout(); plt.show()
+```{ojs}
+//| echo: false
+step5_plot = {
+  const d = step5_data;
+  const series = [
+    ["received x",  d.x, "#1f77b4"],
+    ["echo only",   d.e, "#2ca02c"],
+    ["reverb only", d.r, "#ff7f0e"],
+    ["noise only",  d.n, "#9467bd"],
+  ];
+  const rows = series.flatMap(([name, arr]) =>
+    d.f_kHz.map((f, i) => ({f, dB: arr[i], series: name}))
+  );
+  return Plot.plot({
+    width: 720, height: 280,
+    marginLeft: 55, marginBottom: 38,
+    x: {label: "baseband freq (kHz)", grid: true, domain: [-d.Fs_kHz/2, d.Fs_kHz/2]},
+    y: {label: "PSD (dB)", grid: true},
+    color: {legend: true, domain: series.map(s => s[0]), range: series.map(s => s[2])},
+    marks: [Plot.line(rows, {x: "f", y: "dB", stroke: "series", strokeWidth: 1})],
+    caption: `received PSD, input SNR = ${d.snr_in_dB.toFixed(0)} dB`,
+  });
+}
 ```
 
 ## Step 6 — Receive conditioning
@@ -676,45 +744,65 @@ complex baseband. Our chain is *already* at complex baseband, so the
 "bandpass" here is a baseband lowpass at $\pm B/2$. The PSD before/after
 shows the white noise tails getting cut.
 
-```{pyodide}
-#| input: [B, tau, fc, R0, snr_in_dB]
-import numpy as np, matplotlib.pyplot as plt
+```{ojs}
+//| echo: false
+step6_data = await pyRun(`
+import json, numpy as np
 from sonar.waveform import lfm_chirp
 from sonar.targets import Target, echo
 from sonar.reverberation import reverberation
 from sonar.noise import white_noise, noise_sigma_for_snr
 from sonar.receive import baseband_filter
 from sonar import C_WATER
-
 Fs = max(4 * B, 2 * fc)
 _, s = lfm_chirp(B, tau, Fs)
 n_total = min(int(2.0 * R0 / C_WATER * Fs) + 8192, 16384)
-
-target = Target(R0_m=R0, v_mps=0.0, TS_dB=-15.0)
-y_e = echo(s, Fs, fc, target, SL_dB=200.0, n_out=n_total)
+tgt = Target(R0_m=R0, v_mps=0.0, TS_dB=-15.0)
+y_e = echo(s, Fs, fc, tgt, SL_dB=200.0, n_out=n_total)
 rng = np.random.default_rng(2)
 y_r = reverberation(n_total, Fs, B, decay_tau_s=0.2, rev_level=1e8, rng=rng)
 sig_pwr = np.mean(np.abs(y_e[y_e != 0]) ** 2) if np.any(y_e != 0) else 1.0
 y_n = white_noise(n_total, noise_sigma_for_snr(sig_pwr, snr_in_dB), rng=rng)
 x = y_e + y_r + y_n
 x_bb = baseband_filter(x, Fs, B)
-
 w = np.hanning(n_total)
 def psd(z):
     Z = np.fft.fft(z * w)
     return np.abs(Z) ** 2 / (Fs * (w * w).sum())
 f = np.fft.fftshift(np.fft.fftfreq(n_total, 1.0 / Fs))
+step = max(1, f.size // 2048)
+def dB(p): return (10*np.log10(np.fft.fftshift(p) + 1e-30))[::step].tolist()
+json.dumps({
+  "f_kHz": (f[::step] / 1e3).tolist(),
+  "before": dB(psd(x)), "after": dB(psd(x_bb)),
+  "band_kHz": float(B) / 2e3,
+  "Fs_kHz": float(Fs) / 1e3,
+})
+`, {B, tau, fc, R0, snr_in_dB})
+```
 
-fig, axes = plt.subplots(1, 2, figsize=(8, 3.0), sharey=True)
-for ax, sig, title in [(axes[0], x, "before bandpass"),
-                       (axes[1], x_bb, "after baseband filter")]:
-    P = np.fft.fftshift(psd(sig))
-    ax.plot(f/1e3, 10*np.log10(P + 1e-30))
-    ax.axvline(-B/2/1e3, color="r", ls="--", lw=0.8, alpha=0.5)
-    ax.axvline(+B/2/1e3, color="r", ls="--", lw=0.8, alpha=0.5)
-    ax.set_xlabel("baseband freq (kHz)"); ax.set_title(title); ax.grid(alpha=0.3)
-axes[0].set_ylabel("PSD (dB)")
-plt.tight_layout(); plt.show()
+```{ojs}
+//| echo: false
+step6_plot = {
+  const d = step6_data;
+  const rows = d.f_kHz.flatMap((f, i) => [
+    {f, dB: d.before[i], panel: "before bandpass"},
+    {f, dB: d.after[i],  panel: "after baseband filter"},
+  ]);
+  return Plot.plot({
+    width: 720, height: 260,
+    marginLeft: 55, marginBottom: 38,
+    x: {label: "baseband freq (kHz)", grid: true, domain: [-d.Fs_kHz/2, d.Fs_kHz/2]},
+    y: {label: "PSD (dB)", grid: true},
+    fx: {label: null},
+    marks: [
+      Plot.line(rows, {x: "f", y: "dB", fx: "panel", stroke: "steelblue"}),
+      Plot.ruleX([-d.band_kHz, d.band_kHz], {stroke: "#c0392b",
+        strokeDasharray: "3 3", strokeOpacity: 0.6}),
+    ],
+    facet: {data: rows, x: "panel"},
+  });
+}
 ```
 
 ## Step 7 — Matched filter {.scrollable}
@@ -730,9 +818,12 @@ below uses your current SNR slider; flip the toggle to compare bypass vs.
 MF on the same axes.
 :::
 
-```{pyodide}
-#| input: [B, tau, fc, R0, v, snr_in_dB, apply_mf]
-import numpy as np, matplotlib.pyplot as plt
+```{ojs}
+//| echo: false
+// Compute BOTH bypass and matched-filter outputs in one Python pass.
+// The apply_mf toggle is then a JS-only choice — no pyodide round-trip.
+step7_data = await pyRun(`
+import json, numpy as np
 from sonar.waveform import lfm_chirp
 from sonar.targets import Target, echo
 from sonar.reverberation import reverberation
@@ -740,37 +831,62 @@ from sonar.noise import white_noise, noise_sigma_for_snr
 from sonar.receive import baseband_filter
 from sonar.matched_filter import matched_filter, mf_gain_dB
 from sonar import C_WATER
-
 Fs = max(4 * B, 2 * fc)
 _, s = lfm_chirp(B, tau, Fs)
 n_total = int(2.5 * 2 * R0 / C_WATER * Fs) + 8192
-
-target = Target(R0_m=R0, v_mps=v, TS_dB=-15.0)
-y_e = echo(s, Fs, fc, target, SL_dB=200.0, n_out=n_total)
+tgt = Target(R0_m=R0, v_mps=v, TS_dB=-15.0)
+y_e = echo(s, Fs, fc, tgt, SL_dB=200.0, n_out=n_total)
 rng = np.random.default_rng(3)
 y_r = reverberation(n_total, Fs, B, decay_tau_s=0.4, rev_level=1e8, rng=rng)
 sig_pwr = np.mean(np.abs(y_e[y_e != 0]) ** 2) if np.any(y_e != 0) else 1.0
 y_n = white_noise(n_total, noise_sigma_for_snr(sig_pwr, snr_in_dB), rng=rng)
 x_bb = baseband_filter(y_e + y_r + y_n, Fs, B)
+mf  = matched_filter(x_bb, s)
+range_axis = np.arange(n_total) / Fs * C_WATER / 2.0
+def norm_dB(z):
+    m = 20 * np.log10(np.abs(z) + 1e-12)
+    return (m - m.max()).astype(float)
+bp_dB, mf_dB = norm_dB(x_bb), norm_dB(mf)
+# Restrict to the display window, then down-sample
+r_max = 1.2 * R0 + 200
+keep = range_axis <= r_max
+range_axis = range_axis[keep]
+bp_dB, mf_dB = bp_dB[keep], mf_dB[keep]
+step = max(1, range_axis.size // 4000)
+json.dumps({
+  "range": range_axis[::step].tolist(),
+  "bypass": bp_dB[::step].tolist(),
+  "mf": mf_dB[::step].tolist(),
+  "R0": float(R0),
+  "mf_gain_dB": float(mf_gain_dB(B, tau)),
+})
+`, {B, tau, fc, R0, v, snr_in_dB})
+```
 
-if apply_mf:
-    out = matched_filter(x_bb, s)
-    title = f"matched-filter output (gain ≈ {mf_gain_dB(B, tau):.1f} dB)"
-else:
-    out = x_bb
-    title = "BYPASS — raw conditioned signal (no matched filter)"
-
-range_axis = np.arange(out.size) / Fs * C_WATER / 2.0
-mag_dB = 20 * np.log10(np.abs(out) + 1e-12)
-mag_dB -= mag_dB.max()  # normalise to 0 dB peak
-
-fig, ax = plt.subplots(figsize=(8, 3.4))
-ax.plot(range_axis, mag_dB, lw=0.6)
-ax.axvline(R0, color="r", ls="--", lw=1, label=f"true target @ {R0:.0f} m")
-ax.set_xlabel("range (m)"); ax.set_ylabel("normalised magnitude (dB)")
-ax.set_ylim(-60, 5); ax.set_xlim(0, 1.2 * R0 + 200)
-ax.set_title(title); ax.grid(alpha=0.3); ax.legend()
-plt.tight_layout(); plt.show()
+```{ojs}
+//| echo: false
+// Re-renders on apply_mf (JS-side toggle) WITHOUT re-running Python.
+step7_plot = {
+  const d = step7_data;
+  const trace = apply_mf ? d.mf : d.bypass;
+  const pts = d.range.map((r, i) => ({r, dB: trace[i]}));
+  return Plot.plot({
+    width: 720, height: 260,
+    marginLeft: 55, marginBottom: 38,
+    x: {label: "range (m)", grid: true, domain: [0, d.range[d.range.length-1]]},
+    y: {label: "normalised magnitude (dB)", grid: true, domain: [-60, 5]},
+    marks: [
+      Plot.line(pts, {x: "r", y: "dB", stroke: apply_mf ? "steelblue" : "#888", strokeWidth: 0.7}),
+      Plot.ruleX([d.R0], {stroke: "#c0392b", strokeDasharray: "4 3"}),
+      Plot.text([{x: d.R0, y: 5}],
+        {x: "x", y: "y", text: [`true target @ ${d.R0.toFixed(0)} m`],
+         fill: "#c0392b", dx: 4, dy: 0, textAnchor: "start", fontSize: 10}),
+    ],
+    caption: apply_mf
+      ? `matched-filter output (gain ≈ ${d.mf_gain_dB.toFixed(1)} dB)`
+      : "BYPASS — raw conditioned signal (no matched filter)",
+  });
+}
 ```
 
 ### Bandwidth → range resolution {.unnumbered}
@@ -783,36 +899,56 @@ grows. The live $\Delta r = c/(2B)$ readout next to the slider tracks
 the actual resolution.
 :::
 
-```{pyodide}
-#| input: [B, tau, fc, R0]
-import numpy as np, matplotlib.pyplot as plt
+```{ojs}
+//| echo: false
+step7b_data = await pyRun(`
+import json, numpy as np
 from sonar.waveform import lfm_chirp
 from sonar.targets import Target, echo
 from sonar.matched_filter import matched_filter
 from sonar import C_WATER
-
 Fs = max(4 * B, 2 * fc)
 _, s = lfm_chirp(B, tau, Fs)
-
 t1 = Target(R0_m=R0,       v_mps=0.0, TS_dB=-15.0)
-t2 = Target(R0_m=R0 + 5.0, v_mps=0.0, TS_dB=-15.0)   # 5 m apart
+t2 = Target(R0_m=R0 + 5.0, v_mps=0.0, TS_dB=-15.0)
 n_total = int(2.5 * 2 * (R0 + 50) / C_WATER * Fs) + 8192
 y = echo(s, Fs, fc, t1, n_out=n_total) + echo(s, Fs, fc, t2, n_out=n_total)
-
 mf = matched_filter(y, s)
 range_axis = np.arange(mf.size) / Fs * C_WATER / 2.0
-mag = np.abs(mf); mag /= mag.max()
+mag = np.abs(mf); mag = mag / mag.max()
+# Restrict to the display window
+lo, hi = R0 - 30, R0 + 35
+keep = (range_axis >= lo) & (range_axis <= hi)
+range_axis = range_axis[keep]
+mag_dB = 20 * np.log10(mag[keep] + 1e-9)
+step = max(1, range_axis.size // 3000)
+json.dumps({
+  "range": range_axis[::step].tolist(),
+  "mag_dB": mag_dB[::step].tolist(),
+  "R0": float(R0), "dr": float(C_WATER / (2 * B)),
+  "xmin": float(lo), "xmax": float(hi),
+})
+`, {B, tau, fc, R0})
+```
 
-dr = C_WATER / (2 * B)
-fig, ax = plt.subplots(figsize=(8, 3.0))
-ax.plot(range_axis, 20*np.log10(mag + 1e-9), lw=0.6)
-ax.axvline(R0,         color="r", ls="--", lw=1, label="target 1")
-ax.axvline(R0 + 5.0,   color="m", ls="--", lw=1, label="target 2 (+5 m)")
-ax.set_xlim(R0 - 30, R0 + 35); ax.set_ylim(-40, 5)
-ax.set_xlabel("range (m)"); ax.set_ylabel("MF mag (dB)")
-ax.set_title(f"two targets, separation 5 m  |  Δr = c/(2B) = {dr:.2f} m")
-ax.grid(alpha=0.3); ax.legend()
-plt.tight_layout(); plt.show()
+```{ojs}
+//| echo: false
+step7b_plot = {
+  const d = step7b_data;
+  const pts = d.range.map((r, i) => ({r, dB: d.mag_dB[i]}));
+  return Plot.plot({
+    width: 720, height: 240,
+    marginLeft: 55, marginBottom: 38,
+    x: {label: "range (m)", grid: true, domain: [d.xmin, d.xmax]},
+    y: {label: "MF mag (dB)", grid: true, domain: [-40, 5]},
+    marks: [
+      Plot.line(pts, {x: "r", y: "dB", stroke: "steelblue", strokeWidth: 0.8}),
+      Plot.ruleX([d.R0],       {stroke: "#c0392b", strokeDasharray: "4 3"}),
+      Plot.ruleX([d.R0 + 5.0], {stroke: "#9c27b0", strokeDasharray: "4 3"}),
+    ],
+    caption: `two targets, separation 5 m  |  Δr = c/(2B) = ${d.dr.toFixed(2)} m`,
+  });
+}
 ```
 
 ## Step 8 — Envelope detection + TVG
@@ -821,9 +957,10 @@ The display chain takes $|y|$, converts to dB, and adds a time-varying
 gain that compensates for one-way spreading along the range axis. The
 result is what an A-scan would look like on a real sonar console.
 
-```{pyodide}
-#| input: [B, tau, fc, R0, v, snr_in_dB]
-import numpy as np, matplotlib.pyplot as plt
+```{ojs}
+//| echo: false
+step8_data = await pyRun(`
+import json, numpy as np
 from sonar.waveform import lfm_chirp
 from sonar.targets import Target, echo
 from sonar.reverberation import reverberation
@@ -832,32 +969,53 @@ from sonar.receive import baseband_filter
 from sonar.matched_filter import matched_filter
 from sonar.envelope import envelope_dB, tvg
 from sonar import C_WATER
-
 Fs = max(4 * B, 2 * fc)
 _, s = lfm_chirp(B, tau, Fs)
 n_total = int(2.5 * 2 * R0 / C_WATER * Fs) + 8192
-
-target = Target(R0_m=R0, v_mps=v, TS_dB=-15.0)
-y_e = echo(s, Fs, fc, target, SL_dB=200.0, n_out=n_total)
+tgt = Target(R0_m=R0, v_mps=v, TS_dB=-15.0)
+y_e = echo(s, Fs, fc, tgt, SL_dB=200.0, n_out=n_total)
 rng = np.random.default_rng(4)
 y_r = reverberation(n_total, Fs, B, decay_tau_s=0.4, rev_level=1e8, rng=rng)
 sig_pwr = np.mean(np.abs(y_e[y_e != 0]) ** 2) if np.any(y_e != 0) else 1.0
 y_n = white_noise(n_total, noise_sigma_for_snr(sig_pwr, snr_in_dB), rng=rng)
 mf = matched_filter(baseband_filter(y_e + y_r + y_n, Fs, B), s)
-
 env = envelope_dB(mf)
 env_tvg = tvg(env, Fs, fc)
 range_axis = np.arange(env.size) / Fs * C_WATER / 2.0
+r_max = 1.2 * R0 + 200
+keep = range_axis <= r_max
+range_axis = range_axis[keep]; env = env[keep]; env_tvg = env_tvg[keep]
+step = max(1, range_axis.size // 4000)
+json.dumps({
+  "range": range_axis[::step].tolist(),
+  "env": env[::step].tolist(),
+  "env_tvg": env_tvg[::step].tolist(),
+  "R0": float(R0), "r_max": float(r_max),
+})
+`, {B, tau, fc, R0, v, snr_in_dB})
+```
 
-fig, ax = plt.subplots(figsize=(8, 3.2))
-ax.plot(range_axis, env,     lw=0.6, label="envelope (dB)", alpha=0.7)
-ax.plot(range_axis, env_tvg, lw=0.6, label="envelope + TVG (dB)")
-ax.axvline(R0, color="r", ls="--", lw=1, label=f"target @ {R0:.0f} m")
-ax.set_xlabel("range (m)"); ax.set_ylabel("level (dB rel.)")
-ax.set_xlim(0, 1.2 * R0 + 200)
-ax.set_title("post-MF envelope, with and without TVG")
-ax.grid(alpha=0.3); ax.legend()
-plt.tight_layout(); plt.show()
+```{ojs}
+//| echo: false
+step8_plot = {
+  const d = step8_data;
+  const rows = d.range.flatMap((r, i) => [
+    {r, dB: d.env[i],     series: "envelope (dB)"},
+    {r, dB: d.env_tvg[i], series: "envelope + TVG (dB)"},
+  ]);
+  return Plot.plot({
+    width: 720, height: 240,
+    marginLeft: 55, marginBottom: 38,
+    x: {label: "range (m)", grid: true, domain: [0, d.r_max]},
+    y: {label: "level (dB rel.)", grid: true},
+    color: {legend: true, domain: ["envelope (dB)", "envelope + TVG (dB)"]},
+    marks: [
+      Plot.line(rows, {x: "r", y: "dB", stroke: "series", strokeWidth: 0.8}),
+      Plot.ruleX([d.R0], {stroke: "#c0392b", strokeDasharray: "4 3"}),
+    ],
+    caption: `post-MF envelope, with and without TVG; target @ ${d.R0.toFixed(0)} m`,
+  });
+}
 ```
 
 ## Step 9 — Range–Doppler map
@@ -873,57 +1031,78 @@ The target cell rises while its position stays fixed; the noise floor
 stays put. That's coherent gain in real time.
 :::
 
-```{pyodide}
-#| input: [B, tau, fc, R0, v, snr_in_dB, N_pulse, PRI]
-import numpy as np, matplotlib.pyplot as plt
+```{ojs}
+//| echo: false
+step9_data = await pyRun(`
+import json, numpy as np
 from sonar.waveform import lfm_chirp
 from sonar.targets import Target, echo
 from sonar.noise import white_noise, noise_sigma_for_snr
 from sonar.matched_filter import matched_filter
 from sonar.range_doppler import range_doppler_map, doppler_axis_velocity
 from sonar import C_WATER
-
 Fs = max(4 * B, 2 * fc)
 _, s = lfm_chirp(B, tau, Fs)
-
-# range-axis length: cover up to 1.5 * R0
 n_range = int(2.0 * 1.5 * R0 / C_WATER * Fs) + s.size + 64
-target = Target(R0_m=R0, v_mps=v, TS_dB=-15.0)
-
-# build N_pulse range-compressed traces
 N_pulse_int = int(N_pulse)
+tgt = Target(R0_m=R0, v_mps=v, TS_dB=-15.0)
 pulses = np.empty((N_pulse_int, n_range), dtype=np.complex128)
 rng = np.random.default_rng(5)
 sig_pwr_ref = None
 for k in range(N_pulse_int):
-    y_e = echo(s, Fs, fc, target, SL_dB=200.0, n_out=n_range)
+    y_e = echo(s, Fs, fc, tgt, SL_dB=200.0, n_out=n_range)
     if sig_pwr_ref is None:
         sig_pwr_ref = np.mean(np.abs(y_e[y_e != 0]) ** 2) if np.any(y_e != 0) else 1.0
     sigma = noise_sigma_for_snr(sig_pwr_ref, snr_in_dB)
-    n = white_noise(n_range, sigma, rng=rng)
-    # slow-time phase ramp from inter-pulse Doppler progression
+    nz = white_noise(n_range, sigma, rng=rng)
     phase = np.exp(-2j * np.pi * (2 * v * fc / C_WATER) * k * PRI)
-    mf = matched_filter(y_e * phase + n, s)
-    pulses[k, :] = mf
-
+    pulses[k, :] = matched_filter(y_e * phase + nz, s)
 rd_dB, fd = range_doppler_map(pulses, PRI, window=True)
 v_axis = doppler_axis_velocity(fd, fc)
 r_axis = np.arange(n_range) / Fs * C_WATER / 2.0
+# downsample the range axis for the heatmap payload
+step = max(1, r_axis.size // 1024)
+r_ax_ds = r_axis[::step]
+rd_dB_ds = rd_dB[:, ::step]
+json.dumps({
+  "r": r_ax_ds.tolist(), "v": v_axis.tolist(),
+  "z": rd_dB_ds.tolist(), "zmax": float(rd_dB_ds.max()),
+  "R0": float(R0), "v_target": float(v),
+  "N_pulse": int(N_pulse_int), "PRI_ms": float(PRI) * 1e3,
+})
+`, {B, tau, fc, R0, v, snr_in_dB, N_pulse, PRI})
+```
 
-# annotate the true cell
-i_r = int(np.argmin(np.abs(r_axis - R0)))
-i_v = int(np.argmin(np.abs(v_axis - v)))
-
-fig, ax = plt.subplots(figsize=(8, 4.0))
-extent = [r_axis[0], r_axis[-1], v_axis[0], v_axis[-1]]
-im = ax.imshow(rd_dB, origin="lower", aspect="auto", extent=extent,
-               vmin=rd_dB.max() - 60, vmax=rd_dB.max(), cmap="viridis")
-ax.scatter([r_axis[i_r]], [v_axis[i_v]], facecolors="none",
-           edgecolors="red", s=120, lw=1.2, label="true target cell")
-ax.set_xlabel("range (m)"); ax.set_ylabel("radial velocity (m/s)")
-ax.set_title(f"range–Doppler map, N_pulse = {N_pulse_int}, PRI = {PRI*1000:.2f} ms")
-fig.colorbar(im, ax=ax, label="dB"); ax.legend(loc="upper right")
-plt.tight_layout(); plt.show()
+```{ojs}
+//| echo: false
+step9_plot = {
+  const d = step9_data;
+  const div = html`<div style="width:100%;height:380px"></div>`;
+  Plotly.newPlot(div, [{
+    type: "heatmap",
+    z: d.z, x: d.r, y: d.v,
+    colorscale: "Viridis",
+    zmin: d.zmax - 60, zmax: d.zmax,
+    colorbar: {title: "dB", thickness: 10},
+    hovertemplate: "range %{x:.1f} m<br>v %{y:.2f} m/s<br>%{z:.1f} dB<extra></extra>",
+  }, {
+    type: "scatter", mode: "markers",
+    x: [d.R0], y: [d.v_target],
+    marker: {size: 14, color: "rgba(0,0,0,0)",
+             line: {color: "red", width: 1.5}, symbol: "circle"},
+    name: "true target cell",
+    hovertemplate: "true target<br>R₀ %{x:.0f} m, v %{y:.2f} m/s<extra></extra>",
+  }], {
+    margin: {l: 60, r: 10, t: 36, b: 42},
+    xaxis: {title: "range (m)"},
+    yaxis: {title: "radial velocity (m/s)"},
+    title: {text: `range–Doppler map, N_pulse = ${d.N_pulse}, PRI = ${d.PRI_ms.toFixed(2)} ms`,
+            font: {size: 13}},
+    showlegend: false,
+  }, {displayModeBar: true, displaylogo: false, responsive: true,
+     modeBarButtonsToRemove: ["select2d","lasso2d","toggleSpikelines"]});
+  return div;
+}
 ```
 
 ## Step 10 — CA-CFAR detection
@@ -934,9 +1113,10 @@ multiplies by $\alpha = N\bigl(P_\text{fa}^{-1/N}-1\bigr)$, and thresholds.
 We run it across the range axis of the peak Doppler bin and annotate
 detections on the RD map.
 
-```{pyodide}
-#| input: [B, tau, fc, R0, v, snr_in_dB, N_pulse, PRI, Pfa]
-import numpy as np, matplotlib.pyplot as plt
+```{ojs}
+//| echo: false
+step10_data = await pyRun(`
+import json, numpy as np
 from sonar.waveform import lfm_chirp
 from sonar.targets import Target, echo
 from sonar.noise import white_noise, noise_sigma_for_snr
@@ -944,67 +1124,106 @@ from sonar.matched_filter import matched_filter
 from sonar.range_doppler import range_doppler_map, doppler_axis_velocity
 from sonar.detection import ca_cfar_threshold, detect, roc_curve
 from sonar import C_WATER
-
 Fs = max(4 * B, 2 * fc)
 _, s = lfm_chirp(B, tau, Fs)
-
 n_range = int(2.0 * 1.5 * R0 / C_WATER * Fs) + s.size + 64
-target = Target(R0_m=R0, v_mps=v, TS_dB=-15.0)
 N_pulse_int = int(N_pulse)
-
+tgt = Target(R0_m=R0, v_mps=v, TS_dB=-15.0)
 pulses = np.empty((N_pulse_int, n_range), dtype=np.complex128)
 rng = np.random.default_rng(6)
 sig_pwr_ref = None
 for k in range(N_pulse_int):
-    y_e = echo(s, Fs, fc, target, SL_dB=200.0, n_out=n_range)
+    y_e = echo(s, Fs, fc, tgt, SL_dB=200.0, n_out=n_range)
     if sig_pwr_ref is None:
         sig_pwr_ref = np.mean(np.abs(y_e[y_e != 0]) ** 2) if np.any(y_e != 0) else 1.0
     sigma = noise_sigma_for_snr(sig_pwr_ref, snr_in_dB)
-    n = white_noise(n_range, sigma, rng=rng)
+    nz = white_noise(n_range, sigma, rng=rng)
     phase = np.exp(-2j * np.pi * (2 * v * fc / C_WATER) * k * PRI)
-    pulses[k, :] = matched_filter(y_e * phase + n, s)
-
+    pulses[k, :] = matched_filter(y_e * phase + nz, s)
 rd_dB, fd = range_doppler_map(pulses, PRI, window=True)
 v_axis = doppler_axis_velocity(fd, fc)
 r_axis = np.arange(n_range) / Fs * C_WATER / 2.0
-
-# Linear-power RD map for CFAR
 rd_pwr = 10.0 ** (rd_dB / 10.0)
-
-# CFAR across range at each Doppler bin
 det_mask = np.zeros_like(rd_pwr, dtype=bool)
 for iv in range(rd_pwr.shape[0]):
     th, _ = ca_cfar_threshold(rd_pwr[iv, :], train=16, guard=2, Pfa=Pfa)
     det_mask[iv, :] = detect(rd_pwr[iv, :], th)
-
-fig, axes = plt.subplots(1, 2, figsize=(10, 3.6))
-extent = [r_axis[0], r_axis[-1], v_axis[0], v_axis[-1]]
-ax = axes[0]
-im = ax.imshow(rd_dB, origin="lower", aspect="auto", extent=extent,
-               vmin=rd_dB.max() - 60, vmax=rd_dB.max(), cmap="viridis")
-# overlay detections
-iv_det, ir_det = np.nonzero(det_mask)
-ax.scatter(r_axis[ir_det], v_axis[iv_det], s=12, marker="x",
-           color="red", alpha=0.8, label=f"CFAR hits (Pfa={Pfa:.0e})")
-ax.axvline(R0, color="w", ls=":", lw=0.7, alpha=0.6)
-ax.axhline(v,  color="w", ls=":", lw=0.7, alpha=0.6)
-ax.set_xlabel("range (m)"); ax.set_ylabel("radial velocity (m/s)")
-ax.set_xlim(r_axis[0], r_axis[-1])
-ax.set_ylim(v_axis[0], v_axis[-1])
-ax.set_title("RD map + CFAR detections")
-fig.colorbar(im, ax=ax, label="dB"); ax.legend(loc="upper right", fontsize=8)
-
-# ROC for this scenario (closed-form)
-ax = axes[1]
+step = max(1, r_axis.size // 1024)
+r_ds = r_axis[::step]
+rd_dB_ds = rd_dB[:, ::step]
+det_iv, det_ir = np.nonzero(det_mask[:, ::step])
 snr_dB_range = np.linspace(-20, 20, 201)
 _, pd = roc_curve(snr_dB_range, n_pulses=N_pulse_int)
-ax.semilogy(snr_dB_range, pd, lw=1.5)
-ax.axvline(snr_in_dB, color="r", ls="--", lw=1,
-           label=f"current SNR = {snr_in_dB} dB")
-ax.set_xlabel("input SNR (dB)"); ax.set_ylabel("Pd")
-ax.set_title(f"ROC, Pfa = 1e-4, N_pulse = {N_pulse_int}")
-ax.set_ylim(1e-3, 1.1); ax.grid(alpha=0.3, which="both"); ax.legend()
-plt.tight_layout(); plt.show()
+json.dumps({
+  "r": r_ds.tolist(), "v": v_axis.tolist(),
+  "z": rd_dB_ds.tolist(), "zmax": float(rd_dB_ds.max()),
+  "det_r": r_ds[det_ir].tolist(),
+  "det_v": v_axis[det_iv].tolist(),
+  "R0": float(R0), "v_target": float(v),
+  "N_pulse": int(N_pulse_int),
+  "Pfa": float(Pfa),
+  "snr_grid": snr_dB_range.tolist(), "pd": pd.tolist(),
+  "snr_in_dB": float(snr_in_dB),
+})
+`, {B, tau, fc, R0, v, snr_in_dB, N_pulse, PRI, Pfa})
+```
+
+```{ojs}
+//| echo: false
+step10_rdmap = {
+  const d = step10_data;
+  const div = html`<div style="width:100%;height:360px"></div>`;
+  Plotly.newPlot(div, [{
+    type: "heatmap",
+    z: d.z, x: d.r, y: d.v,
+    colorscale: "Viridis",
+    zmin: d.zmax - 60, zmax: d.zmax,
+    colorbar: {title: "dB", thickness: 10},
+    hovertemplate: "range %{x:.1f} m<br>v %{y:.2f} m/s<br>%{z:.1f} dB<extra></extra>",
+  }, {
+    type: "scatter", mode: "markers",
+    x: d.det_r, y: d.det_v,
+    marker: {symbol: "x", color: "red", size: 7, line: {width: 1.2}},
+    name: `CFAR hits (Pfa=${d.Pfa.toExponential(0)})`,
+    hovertemplate: "CFAR hit<br>range %{x:.1f} m, v %{y:.2f} m/s<extra></extra>",
+  }, {
+    type: "scatter", mode: "markers",
+    x: [d.R0], y: [d.v_target],
+    marker: {symbol: "circle-open", color: "white", size: 14, line: {color: "white", width: 1.2}},
+    name: "true target",
+    hovertemplate: "true target<br>R₀ %{x:.0f} m, v %{y:.2f} m/s<extra></extra>",
+  }], {
+    margin: {l: 60, r: 10, t: 36, b: 42},
+    xaxis: {title: "range (m)"},
+    yaxis: {title: "radial velocity (m/s)"},
+    title: {text: "RD map + CFAR detections", font: {size: 13}},
+    legend: {x: 0.99, y: 0.99, xanchor: "right", yanchor: "top", bgcolor: "rgba(255,255,255,0.6)"},
+  }, {displayModeBar: true, displaylogo: false, responsive: true,
+     modeBarButtonsToRemove: ["select2d","lasso2d","toggleSpikelines"]});
+  return div;
+}
+```
+
+```{ojs}
+//| echo: false
+step10_roc = {
+  const d = step10_data;
+  const pts = d.snr_grid.map((snr, i) => ({snr, pd: Math.max(d.pd[i], 1e-6)}));
+  return Plot.plot({
+    width: 720, height: 260,
+    marginLeft: 60, marginBottom: 42,
+    x: {label: "input SNR (dB)", grid: true},
+    y: {label: "Pd", type: "log", grid: true, domain: [1e-3, 1.1]},
+    marks: [
+      Plot.line(pts, {x: "snr", y: "pd", stroke: "steelblue", strokeWidth: 1.4}),
+      Plot.ruleX([d.snr_in_dB], {stroke: "#c0392b", strokeDasharray: "4 3"}),
+      Plot.text([{x: d.snr_in_dB, y: 1}],
+        {x: "x", y: "y", text: [`current SNR = ${d.snr_in_dB.toFixed(0)} dB`],
+         fill: "#c0392b", dx: 4, textAnchor: "start", fontSize: 10}),
+    ],
+    caption: `ROC, Pfa = ${d.Pfa.toExponential(0)}, N_pulse = ${d.N_pulse}`,
+  });
+}
 ```
 
 ## How this works {.unnumbered}
@@ -1013,30 +1232,37 @@ A quick tour of the stack, because the *mechanism* is the actual point of
 this document:
 
 - **[Quarto](https://quarto.org)** authors the page. The `.qmd` source
-  declares ten sections, eight interactive knobs, and a dozen code cells
-  that produce figures.
-- **[quarto-live](https://github.com/r-wasm/quarto-live)** adds a
-  `{pyodide}` code-cell type and an OJS-powered reactivity layer. Its
-  Lua filter wires cell inputs to OJS observables so each knob change
-  re-runs just the cells that depend on it.
+  declares ten sections, eight interactive knobs, and the OJS + pyodide
+  cells that produce each figure.
 - **[Pyodide](https://pyodide.org)** is CPython 3.12 compiled to
-  WebAssembly. It runs in a worker thread, ships with NumPy/SciPy/
-  Matplotlib as precompiled wheels, and exposes a JavaScript ↔ Python
-  bridge (`from js import ...`) we use to read the current slider values.
+  WebAssembly. It runs in a worker thread, ships with NumPy/SciPy as
+  precompiled wheels, and exposes the `pyodide.runPythonAsync(...)`
+  API that our OJS cells call to do the DSP math. The whole runtime is
+  self-hosted under `./pyodide/` so no CDN request is needed at runtime.
 - **[OJS](https://quarto.org/docs/interactive/ojs/)** (Observable JS)
-  provides the reactive scheduler — `viewof B = Inputs.range(...)` is
-  enough to make `B` a first-class reactive value that Python cells
-  subscribe to.
+  owns the reactive graph. A lightweight `pyRun` helper wraps each
+  Python call so (a) slider values are piped into Pyodide globals,
+  (b) calls are serialised onto a single promise queue, and (c) the
+  sticky status pill tracks per-batch progress.
+- **Plotting is now client-side.** Line, scatter and ROC figures are
+  drawn with [Observable Plot](https://observablehq.com/plot); the two
+  range–Doppler heatmaps use [Plotly](https://plotly.com/javascript/)
+  (also self-hosted, no CDN). Python returns bare arrays as JSON, JS
+  renders, and interaction features (hover tooltips, box-zoom, pan,
+  legend toggle) come for free. The **Apply matched filter** toggle in
+  particular flips in JS without a Python round-trip because both
+  branches (bypass and MF output) are computed once in the data cell.
 - **Our DSP code** lives in the `sonar/` Python package and is imported
   by both the browser-side Pyodide runtime and the local `pytest` suite
   that verifies the analytical invariants (chirp instantaneous frequency,
   MF gain, MF delay localisation, Doppler-bin localisation, and
   CA-CFAR's empirical $P_\text{fa}$).
 
-No servers, no notebooks, no kernels. The `report.html` file you are
-reading is fully self-contained: it embeds the Python source, the Pyodide
-wheels load from a CDN on first visit and then cache, and every figure
-you see was produced *in your browser*.
+No servers, no notebooks, no kernels, no CDN. The `index.html` file you
+are reading is fully self-contained: the Pyodide runtime + scientific
+wheels + Plotly are all served from the same origin as the page. After
+the initial ~50 MB warm-up (cached on first visit), the report runs
+fully offline.
 
 ### Repro in 30 seconds {.unnumbered}
 
