@@ -4,6 +4,7 @@ subtitle: "A textbook 10-step chain rendered as an interactive single-file HTML"
 author: "DSP Demo"
 date: today
 engine: markdown
+output-file: index.html
 ---
 
 {{< include _sonar_files.html >}}
