@@ -10,7 +10,7 @@ output-file: index.html
 ```{=html}
 <div class="build-tag" role="note">
   <span class="build-tag__label">Build</span>
-  <code class="build-tag__value">v13</code>
+  <code class="build-tag__value">v14</code>
 </div>
 <style>
   .build-tag {
@@ -241,61 +241,86 @@ print("Sonar package loaded successfully.")
 
 ```{ojs}
 //| echo: false
-commitOnRelease = (root) => {
-  // Native <input type=range> fires 'input' on every drag pixel and
-  // 'change' on mouse release. Observable Inputs listen to 'input', so
-  // cells re-evaluate nonstop while the user is dragging. This wrapper
-  // swallows 'input' events and synthesises a fresh 'input' event on
-  // 'change' so OJS only propagates the final committed value.
-  const slider = root.querySelector && root.querySelector("input[type=range]");
-  if (!slider) return root;
-  slider.addEventListener("input", (e) => {
-    if (!e.__committed) e.stopImmediatePropagation();
-  }, true);
-  slider.addEventListener("change", () => {
-    const ev = new Event("input", {bubbles: true});
-    ev.__committed = true;
-    slider.dispatchEvent(ev);
+// Derive a *committed* reactive value from a live Inputs.range view.
+// The view itself still emits on every drag pixel (so on-screen labels
+// and derived readouts update fluently), while the committed generator
+// only yields on 'change' (mouse release / arrow-key release), so
+// expensive pyodide cells downstream only fire once per gesture.
+committed = (view) => {
+  const el = (view.querySelector && view.querySelector("input[type=range]")) || view;
+  const read = () => (el.valueAsNumber !== undefined ? el.valueAsNumber : el.value);
+  return Generators.observe((next) => {
+    next(read());
+    const h = () => next(read());
+    el.addEventListener("change", h);
+    return () => el.removeEventListener("change", h);
   });
-  return root;
 }
 ```
 
 ```{ojs}
 //| echo: false
-viewof B = commitOnRelease(Inputs.range([100, 10000], {value: 4000, step: 100, label: "B (Hz)"}))
+viewof B_live = Inputs.range([100, 10000], {value: 4000, step: 100, label: "B (Hz)"})
 ```
 ```{ojs}
 //| echo: false
-md`Δr = c/(2B) = **${(1500/(2*B)).toFixed(2)} m**`
+B = committed(viewof B_live)
 ```
 ```{ojs}
 //| echo: false
-viewof tau = commitOnRelease(Inputs.range([0.01, 0.5], {value: 0.05, step: 0.005, label: "τ (s)"}))
+md`Δr = c/(2B) = **${(1500/(2*B_live)).toFixed(2)} m**`
 ```
 ```{ojs}
 //| echo: false
-md`Bτ = **${(B*tau).toFixed(0)}**, MF gain = **${(10*Math.log10(B*tau)).toFixed(1)} dB**`
+viewof tau_live = Inputs.range([0.01, 0.5], {value: 0.05, step: 0.005, label: "τ (s)"})
 ```
 ```{ojs}
 //| echo: false
-viewof R0 = commitOnRelease(Inputs.range([100, 5000], {value: 1500, step: 25, label: "R₀ (m)"}))
+tau = committed(viewof tau_live)
 ```
 ```{ojs}
 //| echo: false
-viewof v = commitOnRelease(Inputs.range([-20, 20], {value: 5, step: 0.5, label: "v (m/s)"}))
+md`Bτ = **${(B_live*tau_live).toFixed(0)}**, MF gain = **${(10*Math.log10(B_live*tau_live)).toFixed(1)} dB**`
 ```
 ```{ojs}
 //| echo: false
-viewof snr_in_dB = commitOnRelease(Inputs.range([-20, 20], {value: -5, step: 1, label: "SNR (dB)"}))
+viewof R0_live = Inputs.range([100, 5000], {value: 1500, step: 25, label: "R₀ (m)"})
 ```
 ```{ojs}
 //| echo: false
-viewof fc = commitOnRelease(Inputs.range([5000, 50000], {value: 20000, step: 1000, label: "fc (Hz)"}))
+R0 = committed(viewof R0_live)
 ```
 ```{ojs}
 //| echo: false
-viewof PRI = commitOnRelease(Inputs.range([0.0005, 0.02], {value: 0.002, step: 0.0005, label: "PRI (s)"}))
+viewof v_live = Inputs.range([-20, 20], {value: 5, step: 0.5, label: "v (m/s)"})
+```
+```{ojs}
+//| echo: false
+v = committed(viewof v_live)
+```
+```{ojs}
+//| echo: false
+viewof snr_in_dB_live = Inputs.range([-20, 20], {value: -5, step: 1, label: "SNR (dB)"})
+```
+```{ojs}
+//| echo: false
+snr_in_dB = committed(viewof snr_in_dB_live)
+```
+```{ojs}
+//| echo: false
+viewof fc_live = Inputs.range([5000, 50000], {value: 20000, step: 1000, label: "fc (Hz)"})
+```
+```{ojs}
+//| echo: false
+fc = committed(viewof fc_live)
+```
+```{ojs}
+//| echo: false
+viewof PRI_live = Inputs.range([0.0005, 0.02], {value: 0.002, step: 0.0005, label: "PRI (s)"})
+```
+```{ojs}
+//| echo: false
+PRI = committed(viewof PRI_live)
 ```
 ```{ojs}
 //| echo: false
@@ -303,7 +328,7 @@ N = 16
 ```
 ```{ojs}
 //| echo: false
-md`PRI = **${(PRI*1000).toFixed(2)} ms**, Δv = **${(1500/fc/(2*N*PRI)).toFixed(2)} m/s** (N=${N})`
+md`PRI = **${(PRI_live*1000).toFixed(2)} ms**, Δv = **${(1500/fc_live/(2*N*PRI_live)).toFixed(2)} m/s** (N=${N})`
 ```
 ```{ojs}
 //| echo: false
@@ -311,7 +336,11 @@ viewof N_pulse = Inputs.select([1, 4, 16, 64], {value: 16, label: "N_pulse"})
 ```
 ```{ojs}
 //| echo: false
-viewof Pfa_log = commitOnRelease(Inputs.range([-6, -2], {value: -4, step: 0.5, label: "log₁₀ Pfa"}))
+viewof Pfa_log_live = Inputs.range([-6, -2], {value: -4, step: 0.5, label: "log₁₀ Pfa"})
+```
+```{ojs}
+//| echo: false
+Pfa_log = committed(viewof Pfa_log_live)
 ```
 ```{ojs}
 //| echo: false
@@ -319,7 +348,7 @@ Pfa = Math.pow(10, Pfa_log)
 ```
 ```{ojs}
 //| echo: false
-md`Design Pfa = **${Pfa.toExponential(1)}**`
+md`Design Pfa = **${Math.pow(10, Pfa_log_live).toExponential(1)}**`
 ```
 ```{ojs}
 //| echo: false
@@ -343,8 +372,9 @@ _slider_log = {
 _pyodide_patch = {
   if (pyodideOjs && !pyodideOjs.__patched) {
     const original = pyodideOjs.process;
-    let pending = 0;
-    let done = 0;
+    let pending = 0;       // cells currently executing
+    let batchTotal = 0;    // cells scheduled in the current batch
+    let batchDone = 0;     // cells that have resolved in the current batch
 
     const statusEl = document.getElementById('calc-status');
     const textEl = statusEl && statusEl.querySelector('.calc-status__text');
@@ -357,39 +387,37 @@ _pyodide_patch = {
       textEl.textContent = msg;
     };
 
-    let settleTimer = null;
-    const scheduleDone = () => {
-      clearTimeout(settleTimer);
-      settleTimer = setTimeout(() => {
-        if (pending === 0) {
-          setStatus('done', `Calculations complete (${done} plot${done === 1 ? '' : 's'})`);
-        }
-      }, 150);
-    };
-
     pyodideOjs.process = function (ctx, inputs) {
       const id = (ctx && ctx.options && ctx.options.id) || '?';
+      // A new batch starts every time we transition 0 -> non-zero pending.
+      if (pending === 0) {
+        batchTotal = 0;
+        batchDone = 0;
+      }
       pending += 1;
-      clearTimeout(settleTimer);
-      setStatus('running', `Running… (${pending} cell${pending === 1 ? '' : 's'} queued)`);
+      batchTotal += 1;
+      setStatus('running', `Running… (${batchDone}/${batchTotal} plots)`);
       console.log('[pyodide]', id, 'inputs:', inputs);
       const p = original.call(this, ctx, inputs);
-      const finalize = (ok, payload) => {
+      const finalize = (ok) => {
         pending = Math.max(0, pending - 1);
-        if (ok) done += 1;
-        if (pending === 0) scheduleDone();
-        else setStatus('running', `Running… (${pending} cell${pending === 1 ? '' : 's'} left)`);
+        if (ok) batchDone += 1;
+        if (pending === 0) {
+          setStatus('done', `Complete (${batchDone}/${batchTotal} plots)`);
+        } else {
+          setStatus('running', `Running… (${batchDone}/${batchTotal} plots)`);
+        }
       };
       p.then(
         (container) => {
           console.log('[pyodide-done]', id, 'children:',
             container && container.childNodes && container.childNodes.length,
             'html-len:', container && container.innerHTML && container.innerHTML.length);
-          finalize(true, container);
+          finalize(true);
         },
         (err) => {
           console.error('[pyodide-error]', id, err);
-          finalize(false, err);
+          finalize(false);
         }
       );
       return p;
