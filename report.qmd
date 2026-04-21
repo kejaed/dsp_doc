@@ -12,7 +12,7 @@ output-file: index.html
 ```{=html}
 <div class="build-tag" role="note">
   <span class="build-tag__label">Build</span>
-  <code class="build-tag__value">v1</code>
+  <code class="build-tag__value">v3</code>
 </div>
 <style>
   .build-tag {
@@ -107,7 +107,7 @@ document.addEventListener('DOMContentLoaded', function () {
   let t = 0;
   const tick = setInterval(function () {
     t += 1;
-    if (window.__sonarReady) {
+    if (window.sonarReady) {
       clearInterval(tick);
       el.classList.add('is-ready');
       stage.textContent = 'Ready. Scroll down and start twiddling.';
@@ -115,11 +115,18 @@ document.addEventListener('DOMContentLoaded', function () {
       setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 2400);
       return;
     }
-    // Prefer quarto-live's own status text if it's populated.
+    // Prefer quarto-live's own status text while Pyodide is still booting.
     const live = document.getElementById('exercise-loading-status');
     const liveText = live && live.textContent && live.textContent.trim();
     if (liveText) {
       stage.textContent = liveText;
+      return;
+    }
+    // quarto-live removes that element once Pyodide init is complete.
+    // If sonarReady hasn't fired yet, it means the first {pyodide} cell
+    // is still evaluating (or errored).
+    if (!live) {
+      stage.textContent = 'Pyodide ready — running the first Python cell…';
       return;
     }
     for (let i = fallback.length - 1; i >= 0; i--) {
@@ -156,8 +163,7 @@ any normal CPython script — the *same* code that the `pytest` suite runs.
 ```{pyodide}
 #| autorun: true
 #| edit: false
-#| output: false
-#| min-lines: 6
+#| echo: false
 import base64, json, os, sys
 from js import document
 
@@ -182,9 +188,12 @@ import matplotlib.pyplot as plt
 import sonar
 print(f"sonar package mounted from {sonar.__file__}, c = {sonar.C_WATER} m/s")
 
-# Signal the loading banner that everything is up.
-from js import window as _js_window
-_js_window.__sonarReady = True
+# Signal the loading banner that everything is up. The attribute name
+# intentionally avoids leading dunders because Pyodide's JsProxy filters
+# those from attribute writes on JS globals.
+from js import window as _js_window, console as _js_console
+_js_window.sonarReady = True
+_js_console.log("[sonar] setup cell complete, sonarReady=True")
 ```
 
 ## Controls
