@@ -1,0 +1,657 @@
+---
+title: "Active Sonar DSP, Live in Your Browser"
+subtitle: "A textbook 10-step chain rendered as an interactive single-file HTML"
+author: "DSP Demo"
+date: today
+engine: markdown
+---
+
+{{< include _sonar_files.html >}}
+
+## Abstract {.unnumbered}
+
+The DSP here is intentionally textbook — an LFM chirp, two-way spreading,
+matched filtering, range/Doppler, CA-CFAR. **The point of this document is
+not the DSP. The point is that everything below is running in your browser**:
+no server, no Jupyter kernel, no cloud function. The numerical code is real
+NumPy/SciPy executing inside Pyodide; the controls are wired through OJS
+reactivity; the figures redraw on each knob change in well under a second.
+The whole experience ships as a single self-contained `report.html` you can
+host on any static URL — or open from your local filesystem.
+
+::: {.callout-tip appearance="minimal"}
+**First load.** Pyodide and its scientific stack are about 10 MB on first
+visit. Grab a coffee, then everything thereafter is local.
+:::
+
+## Setup {.unnumbered}
+
+The first cell loads the runtime, mounts the `sonar/` Python package
+(inlined into this HTML at render time), and primes the chain. It runs
+once, on first cell evaluation. Every later cell does `import sonar` like
+any normal CPython script — the *same* code that the `pytest` suite runs.
+
+```{pyodide}
+#| autorun: true
+#| edit: false
+#| output: false
+#| min-lines: 6
+import base64, json, os, sys
+from js import document
+
+# Pull the bundled sonar package out of the inline JSON blob.
+blob = document.getElementById("sonar-files").textContent
+files = json.loads(blob)
+
+ROOT = "/home/pyodide"
+for relpath, b64 in files.items():
+    full = os.path.join(ROOT, relpath)
+    os.makedirs(os.path.dirname(full), exist_ok=True)
+    with open(full, "wb") as fh:
+        fh.write(base64.b64decode(b64))
+
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+
+import numpy as np
+import matplotlib
+matplotlib.use("AGG")
+import matplotlib.pyplot as plt
+import sonar
+print(f"sonar package mounted from {sonar.__file__}, c = {sonar.C_WATER} m/s")
+```
+
+## Controls
+
+Slide the knobs and the figures below redo themselves. The four numbers
+beside the sliders are pure OJS arithmetic (no Python round-trip) and
+update as you drag.
+
+::: {.panel-tabset}
+
+### Waveform
+
+```{ojs}
+//| echo: false
+viewof B = Inputs.range([100, 10000], {value: 4000, step: 100, label: "Bandwidth B (Hz)"})
+md`**Range resolution Δr = c/(2B) = ${(1500/(2*B)).toFixed(2)} m**`
+viewof tau = Inputs.range([0.01, 0.5], {value: 0.05, step: 0.005, label: "Pulse duration τ (s)"})
+md`**Time–bandwidth product B·τ = ${(B*tau).toFixed(0)}**, **MF gain 10·log₁₀(Bτ) = ${(10*Math.log10(B*tau)).toFixed(1)} dB**`
+```
+
+### Scenario
+
+```{ojs}
+//| echo: false
+viewof R0 = Inputs.range([100, 5000], {value: 1500, step: 25, label: "Target range R₀ (m)"})
+viewof v  = Inputs.range([-20, 20], {value: 5, step: 0.5, label: "Target velocity v (m/s)"})
+viewof snr_in_dB = Inputs.range([-20, 20], {value: -5, step: 1, label: "Input SNR (dB)"})
+viewof fc = Inputs.range([5000, 50000], {value: 20000, step: 1000, label: "Carrier fc (Hz)"})
+viewof PRI = Inputs.range([0.5, 4.0], {value: 1.5, step: 0.1, label: "PRI (s)"})
+N = 16  // pulses used in the readout below; the integration knob lives in step 9
+md`**Doppler resolution Δv = λ/(2·N·PRI) = ${(1500/fc/(2*N*PRI)).toFixed(3)} m/s** (with N = ${N})`
+```
+
+### Detection
+
+```{ojs}
+//| echo: false
+viewof Pfa_log = Inputs.range([-6, -2], {value: -4, step: 0.5, label: "log₁₀ Pfa"})
+Pfa = Math.pow(10, Pfa_log)
+md`**Design Pfa = ${Pfa.toExponential(1)}**`
+viewof N_pulse = Inputs.select([1, 4, 16, 64], {value: 16, label: "Pulses integrated"})
+viewof apply_mf = Inputs.toggle({value: true, label: "Apply matched filter"})
+```
+
+:::
+
+## Step 1 — Transmit waveform
+
+A linear-FM (chirp) pulse at complex baseband:
+
+$$
+s(t) = \exp\!\left(j\pi\frac{B}{\tau}\,t^2\right), \qquad t\in[0,\tau).
+$$ {#eq-chirp}
+
+Instantaneous frequency sweeps linearly from 0 to $B$ over the pulse.
+The time–bandwidth product $B\tau$ is the only knob that matters here —
+it sets every downstream resolution number.
+
+```{pyodide}
+#| input: [B, tau, fc]
+#| min-lines: 8
+import numpy as np, matplotlib.pyplot as plt
+from sonar.waveform import lfm_chirp
+
+Fs = max(4 * B, 2 * fc)        # comfortable oversampling
+t, s = lfm_chirp(B, tau, Fs)
+
+fig, axes = plt.subplots(2, 1, figsize=(8, 4.2))
+axes[0].plot(t * 1e3, s.real, lw=0.6)
+axes[0].set_xlabel("time (ms)"); axes[0].set_ylabel("Re s(t)")
+axes[0].set_title(f"LFM chirp, Bτ = {B*tau:.0f}")
+
+# spectrogram (real part, plotted at the chosen carrier for visual context)
+from scipy.signal import spectrogram
+nperseg = min(256, max(32, len(s) // 16))
+f, tt, Sxx = spectrogram(s.real, Fs, nperseg=nperseg, noverlap=nperseg // 2)
+axes[1].pcolormesh(tt * 1e3, f * 1e-3, 10 * np.log10(Sxx + 1e-12), shading="auto")
+axes[1].set_xlabel("time (ms)"); axes[1].set_ylabel("freq (kHz)")
+axes[1].set_title("spectrogram of Re s(t)")
+plt.tight_layout(); plt.show()
+```
+
+## Step 2 — Two-way propagation loss
+
+Spherical spreading + Thorp absorption gives one-way TL of
+$\mathrm{TL}(R, f) = 20\log_{10}R + \alpha(f)\,R\cdot 10^{-3}$ dB,
+with Thorp's coefficient $\alpha$ in dB/km. The two-way loss is just $2\,\mathrm{TL}$.
+
+```{pyodide}
+#| input: [fc]
+import numpy as np, matplotlib.pyplot as plt
+from sonar.propagation import transmission_loss, two_way_loss, thorp_absorption
+
+R = np.logspace(1, 4, 400)  # 10 m → 10 km
+fig, ax1 = plt.subplots(figsize=(8, 3.2))
+ax1.semilogx(R, transmission_loss(R, fc), label="one-way TL")
+ax1.semilogx(R, two_way_loss(R, fc), label="two-way 2·TL")
+ax1.set_xlabel("range (m)"); ax1.set_ylabel("loss (dB)")
+ax1.set_title(f"propagation loss at fc = {fc/1e3:.1f} kHz, "
+              f"α = {thorp_absorption(fc):.2f} dB/km")
+ax1.grid(True, which="both", alpha=0.3); ax1.legend()
+plt.tight_layout(); plt.show()
+```
+
+## Step 3 — Target echo
+
+A point target at range $R_0$ moving with radial velocity $v$ returns a
+copy of the transmit waveform delayed by $\tau_d = 2R_0/c$ and shifted in
+frequency by the (narrow-band) Doppler $f_d = -2vf_c/c$. Amplitude is set
+by the radar equation in dB,
+
+$$
+\text{level} = \text{SL} - 2\,\mathrm{TL}(R_0, f_c) + \text{TS}.
+$$ {#eq-radareqn}
+
+```{pyodide}
+#| input: [B, tau, fc, R0, v]
+import numpy as np, matplotlib.pyplot as plt
+from sonar.waveform import lfm_chirp
+from sonar.targets import Target, echo
+from sonar import C_WATER
+
+Fs = max(4 * B, 2 * fc)
+_, s = lfm_chirp(B, tau, Fs)
+target = Target(R0_m=R0, v_mps=v, TS_dB=-15.0)
+y = echo(s, Fs, fc, target, SL_dB=200.0)
+
+t = np.arange(y.size) / Fs
+fig, ax = plt.subplots(figsize=(8, 3.0))
+ax.plot(t, y.real, lw=0.5)
+tau_d = 2 * R0 / C_WATER
+ax.axvline(tau_d, color="r", ls="--", lw=1, label=f"τ_d = 2R₀/c = {tau_d*1e3:.1f} ms")
+ax.set_xlabel("time since transmit (s)"); ax.set_ylabel("Re y(t)")
+ax.set_title(f"echo from target at {R0:.0f} m, v = {v:.1f} m/s")
+ax.legend(); plt.tight_layout(); plt.show()
+```
+
+## Step 4 — Reverberation
+
+Diffuse bottom/volume scatterers produce a complex-Gaussian process with an
+exponentially decaying envelope, bandlimited to the chirp band. We don't
+attempt physical levels — just enough structure to put a realistic
+clutter floor under the matched-filter peak.
+
+```{pyodide}
+#| input: [B, tau, fc, R0]
+import numpy as np, matplotlib.pyplot as plt
+from sonar.reverberation import reverberation
+from sonar import C_WATER
+
+Fs = max(4 * B, 2 * fc)
+n = int(2.5 * 2 * R0 / C_WATER * Fs) + 8192   # span past the target
+rng = np.random.default_rng(0)
+r = reverberation(n, Fs, B, decay_tau_s=0.4, rev_level=1.0, rng=rng)
+
+t = np.arange(n) / Fs
+fig, ax = plt.subplots(figsize=(8, 3.0))
+ax.plot(t, np.abs(r), lw=0.4)
+ax.set_xlabel("time (s)"); ax.set_ylabel("|reverb|")
+ax.set_title(f"reverberation envelope, B = {B:.0f} Hz")
+plt.tight_layout(); plt.show()
+```
+
+## Step 5 — Additive noise + composite received signal
+
+Round it out with white complex-Gaussian noise. The total received signal
+is $x(t) = y_\text{echo}(t) + r(t) + n(t)$, with the noise level set so
+that the input SNR (relative to the echo) matches the slider.
+
+```{pyodide}
+#| input: [B, tau, fc, R0, v, snr_in_dB]
+import numpy as np, matplotlib.pyplot as plt
+from scipy.signal import welch
+from sonar.waveform import lfm_chirp
+from sonar.targets import Target, echo
+from sonar.reverberation import reverberation
+from sonar.noise import white_noise, noise_sigma_for_snr
+from sonar import C_WATER
+
+Fs = max(4 * B, 2 * fc)
+_, s = lfm_chirp(B, tau, Fs)
+n_total = int(2.5 * 2 * R0 / C_WATER * Fs) + 8192
+
+target = Target(R0_m=R0, v_mps=v, TS_dB=-15.0)
+y_e = echo(s, Fs, fc, target, SL_dB=200.0, n_out=n_total)
+
+rng = np.random.default_rng(1)
+y_r = reverberation(n_total, Fs, B, decay_tau_s=0.4, rev_level=1e8, rng=rng)
+sig_pwr = np.mean(np.abs(y_e[y_e != 0]) ** 2) if np.any(y_e != 0) else 1.0
+sigma = noise_sigma_for_snr(sig_pwr, snr_in_dB)
+y_n = white_noise(n_total, sigma, rng=rng)
+x = y_e + y_r + y_n
+
+f, Pxx = welch(x, Fs, nperseg=4096, return_onesided=False)
+_, Pee = welch(y_e, Fs, nperseg=4096, return_onesided=False)
+_, Prr = welch(y_r, Fs, nperseg=4096, return_onesided=False)
+_, Pnn = welch(y_n, Fs, nperseg=4096, return_onesided=False)
+order = np.argsort(f)
+
+fig, ax = plt.subplots(figsize=(8, 3.5))
+ax.plot(f[order]/1e3, 10*np.log10(Pxx[order] + 1e-30), label="received x")
+ax.plot(f[order]/1e3, 10*np.log10(Pee[order] + 1e-30), label="echo only", alpha=0.7)
+ax.plot(f[order]/1e3, 10*np.log10(Prr[order] + 1e-30), label="reverb only", alpha=0.7)
+ax.plot(f[order]/1e3, 10*np.log10(Pnn[order] + 1e-30), label="noise only", alpha=0.7)
+ax.set_xlim(-Fs/2/1e3, Fs/2/1e3)
+ax.set_xlabel("baseband freq (kHz)"); ax.set_ylabel("PSD (dB)")
+ax.set_title(f"received PSD (Welch), input SNR = {snr_in_dB:.0f} dB")
+ax.legend(loc="lower center", ncols=4, fontsize=8); ax.grid(alpha=0.3)
+plt.tight_layout(); plt.show()
+```
+
+## Step 6 — Receive conditioning
+
+In hardware: bandpass to the chirp band, then quadrature-demodulate to
+complex baseband. Our chain is *already* at complex baseband, so the
+"bandpass" here is a baseband lowpass at $\pm B/2$. The PSD before/after
+shows the white noise tails getting cut.
+
+```{pyodide}
+#| input: [B, tau, fc, R0, snr_in_dB]
+import numpy as np, matplotlib.pyplot as plt
+from scipy.signal import welch
+from sonar.waveform import lfm_chirp
+from sonar.targets import Target, echo
+from sonar.reverberation import reverberation
+from sonar.noise import white_noise, noise_sigma_for_snr
+from sonar.receive import baseband_filter
+from sonar import C_WATER
+
+Fs = max(4 * B, 2 * fc)
+_, s = lfm_chirp(B, tau, Fs)
+n_total = int(2.5 * 2 * R0 / C_WATER * Fs) + 8192
+
+target = Target(R0_m=R0, v_mps=0.0, TS_dB=-15.0)
+y_e = echo(s, Fs, fc, target, SL_dB=200.0, n_out=n_total)
+rng = np.random.default_rng(2)
+y_r = reverberation(n_total, Fs, B, decay_tau_s=0.4, rev_level=1e8, rng=rng)
+sig_pwr = np.mean(np.abs(y_e[y_e != 0]) ** 2) if np.any(y_e != 0) else 1.0
+y_n = white_noise(n_total, noise_sigma_for_snr(sig_pwr, snr_in_dB), rng=rng)
+x = y_e + y_r + y_n
+x_bb = baseband_filter(x, Fs, B)
+
+fig, axes = plt.subplots(1, 2, figsize=(8, 3.0), sharey=True)
+for ax, sig, title in [(axes[0], x, "before bandpass"),
+                       (axes[1], x_bb, "after baseband filter")]:
+    f, P = welch(sig, Fs, nperseg=4096, return_onesided=False)
+    o = np.argsort(f)
+    ax.plot(f[o]/1e3, 10*np.log10(P[o] + 1e-30))
+    ax.axvline(-B/2/1e3, color="r", ls="--", lw=0.8, alpha=0.5)
+    ax.axvline(+B/2/1e3, color="r", ls="--", lw=0.8, alpha=0.5)
+    ax.set_xlabel("baseband freq (kHz)"); ax.set_title(title); ax.grid(alpha=0.3)
+axes[0].set_ylabel("PSD (dB)")
+plt.tight_layout(); plt.show()
+```
+
+## Step 7 — Matched filter {.scrollable}
+
+The centerpiece. Cross-correlate the conditioned signal with the
+time-reversed conjugate of the transmit pulse. Output peak SNR rises by
+$10\log_{10}(B\tau)$ — the only "gain" you get for free in DSP.
+
+::: {.callout-important appearance="simple"}
+**Payoff 1.** Toggle **Apply matched filter** in the Controls panel and
+watch the target peak go from buried-in-noise to unmissable. The plot
+below uses your current SNR slider; flip the toggle to compare bypass vs.
+MF on the same axes.
+:::
+
+```{pyodide}
+#| input: [B, tau, fc, R0, v, snr_in_dB, apply_mf]
+import numpy as np, matplotlib.pyplot as plt
+from sonar.waveform import lfm_chirp
+from sonar.targets import Target, echo
+from sonar.reverberation import reverberation
+from sonar.noise import white_noise, noise_sigma_for_snr
+from sonar.receive import baseband_filter
+from sonar.matched_filter import matched_filter, mf_gain_dB
+from sonar import C_WATER
+
+Fs = max(4 * B, 2 * fc)
+_, s = lfm_chirp(B, tau, Fs)
+n_total = int(2.5 * 2 * R0 / C_WATER * Fs) + 8192
+
+target = Target(R0_m=R0, v_mps=v, TS_dB=-15.0)
+y_e = echo(s, Fs, fc, target, SL_dB=200.0, n_out=n_total)
+rng = np.random.default_rng(3)
+y_r = reverberation(n_total, Fs, B, decay_tau_s=0.4, rev_level=1e8, rng=rng)
+sig_pwr = np.mean(np.abs(y_e[y_e != 0]) ** 2) if np.any(y_e != 0) else 1.0
+y_n = white_noise(n_total, noise_sigma_for_snr(sig_pwr, snr_in_dB), rng=rng)
+x_bb = baseband_filter(y_e + y_r + y_n, Fs, B)
+
+if apply_mf:
+    out = matched_filter(x_bb, s)
+    title = f"matched-filter output (gain ≈ {mf_gain_dB(B, tau):.1f} dB)"
+else:
+    out = x_bb
+    title = "BYPASS — raw conditioned signal (no matched filter)"
+
+range_axis = np.arange(out.size) / Fs * C_WATER / 2.0
+mag_dB = 20 * np.log10(np.abs(out) + 1e-12)
+mag_dB -= mag_dB.max()  # normalise to 0 dB peak
+
+fig, ax = plt.subplots(figsize=(8, 3.4))
+ax.plot(range_axis, mag_dB, lw=0.6)
+ax.axvline(R0, color="r", ls="--", lw=1, label=f"true target @ {R0:.0f} m")
+ax.set_xlabel("range (m)"); ax.set_ylabel("normalised magnitude (dB)")
+ax.set_ylim(-60, 5); ax.set_xlim(0, 1.2 * R0 + 200)
+ax.set_title(title); ax.grid(alpha=0.3); ax.legend()
+plt.tight_layout(); plt.show()
+```
+
+### Bandwidth → range resolution {.unnumbered}
+
+::: {.callout-important appearance="simple"}
+**Payoff 2.** Two equal-strength targets sit 5 m apart, hard-coded for
+this demo. Slide **Bandwidth** in the Controls panel from 100 Hz upward;
+watch the two MF peaks merge into one blob at low B and split apart as B
+grows. The live $\Delta r = c/(2B)$ readout next to the slider tracks
+the actual resolution.
+:::
+
+```{pyodide}
+#| input: [B, tau, fc, R0]
+import numpy as np, matplotlib.pyplot as plt
+from sonar.waveform import lfm_chirp
+from sonar.targets import Target, echo
+from sonar.matched_filter import matched_filter
+from sonar import C_WATER
+
+Fs = max(4 * B, 2 * fc)
+_, s = lfm_chirp(B, tau, Fs)
+
+t1 = Target(R0_m=R0,       v_mps=0.0, TS_dB=-15.0)
+t2 = Target(R0_m=R0 + 5.0, v_mps=0.0, TS_dB=-15.0)   # 5 m apart
+n_total = int(2.5 * 2 * (R0 + 50) / C_WATER * Fs) + 8192
+y = echo(s, Fs, fc, t1, n_out=n_total) + echo(s, Fs, fc, t2, n_out=n_total)
+
+mf = matched_filter(y, s)
+range_axis = np.arange(mf.size) / Fs * C_WATER / 2.0
+mag = np.abs(mf); mag /= mag.max()
+
+dr = C_WATER / (2 * B)
+fig, ax = plt.subplots(figsize=(8, 3.0))
+ax.plot(range_axis, 20*np.log10(mag + 1e-9), lw=0.6)
+ax.axvline(R0,         color="r", ls="--", lw=1, label="target 1")
+ax.axvline(R0 + 5.0,   color="m", ls="--", lw=1, label="target 2 (+5 m)")
+ax.set_xlim(R0 - 30, R0 + 35); ax.set_ylim(-40, 5)
+ax.set_xlabel("range (m)"); ax.set_ylabel("MF mag (dB)")
+ax.set_title(f"two targets, separation 5 m  |  Δr = c/(2B) = {dr:.2f} m")
+ax.grid(alpha=0.3); ax.legend()
+plt.tight_layout(); plt.show()
+```
+
+## Step 8 — Envelope detection + TVG
+
+The display chain takes $|y|$, converts to dB, and adds a time-varying
+gain that compensates for one-way spreading along the range axis. The
+result is what an A-scan would look like on a real sonar console.
+
+```{pyodide}
+#| input: [B, tau, fc, R0, v, snr_in_dB]
+import numpy as np, matplotlib.pyplot as plt
+from sonar.waveform import lfm_chirp
+from sonar.targets import Target, echo
+from sonar.reverberation import reverberation
+from sonar.noise import white_noise, noise_sigma_for_snr
+from sonar.receive import baseband_filter
+from sonar.matched_filter import matched_filter
+from sonar.envelope import envelope_dB, tvg
+from sonar import C_WATER
+
+Fs = max(4 * B, 2 * fc)
+_, s = lfm_chirp(B, tau, Fs)
+n_total = int(2.5 * 2 * R0 / C_WATER * Fs) + 8192
+
+target = Target(R0_m=R0, v_mps=v, TS_dB=-15.0)
+y_e = echo(s, Fs, fc, target, SL_dB=200.0, n_out=n_total)
+rng = np.random.default_rng(4)
+y_r = reverberation(n_total, Fs, B, decay_tau_s=0.4, rev_level=1e8, rng=rng)
+sig_pwr = np.mean(np.abs(y_e[y_e != 0]) ** 2) if np.any(y_e != 0) else 1.0
+y_n = white_noise(n_total, noise_sigma_for_snr(sig_pwr, snr_in_dB), rng=rng)
+mf = matched_filter(baseband_filter(y_e + y_r + y_n, Fs, B), s)
+
+env = envelope_dB(mf)
+env_tvg = tvg(env, Fs, fc)
+range_axis = np.arange(env.size) / Fs * C_WATER / 2.0
+
+fig, ax = plt.subplots(figsize=(8, 3.2))
+ax.plot(range_axis, env,     lw=0.6, label="envelope (dB)", alpha=0.7)
+ax.plot(range_axis, env_tvg, lw=0.6, label="envelope + TVG (dB)")
+ax.axvline(R0, color="r", ls="--", lw=1, label=f"target @ {R0:.0f} m")
+ax.set_xlabel("range (m)"); ax.set_ylabel("level (dB rel.)")
+ax.set_xlim(0, 1.2 * R0 + 200)
+ax.set_title("post-MF envelope, with and without TVG")
+ax.grid(alpha=0.3); ax.legend()
+plt.tight_layout(); plt.show()
+```
+
+## Step 9 — Range–Doppler map
+
+Stack $N_\text{pulse}$ consecutive pings along a slow-time axis, FFT
+across that axis, and you get a range–Doppler image. Coherent
+integration gain is $10\log_{10}N_\text{pulse}$ — a clean 18 dB at $N=64$
+versus $N=1$.
+
+::: {.callout-important appearance="simple"}
+**Payoff 3.** Set **Pulses integrated** in Controls to 1, then 4, 16, 64.
+The target cell rises while its position stays fixed; the noise floor
+stays put. That's coherent gain in real time.
+:::
+
+```{pyodide}
+#| input: [B, tau, fc, R0, v, snr_in_dB, N_pulse, PRI]
+import numpy as np, matplotlib.pyplot as plt
+from sonar.waveform import lfm_chirp
+from sonar.targets import Target, echo
+from sonar.noise import white_noise, noise_sigma_for_snr
+from sonar.matched_filter import matched_filter
+from sonar.range_doppler import range_doppler_map, doppler_axis_velocity
+from sonar import C_WATER
+
+Fs = max(4 * B, 2 * fc)
+_, s = lfm_chirp(B, tau, Fs)
+
+# range-axis length: cover up to 1.5 * R0
+n_range = int(2.0 * 1.5 * R0 / C_WATER * Fs) + s.size + 64
+target = Target(R0_m=R0, v_mps=v, TS_dB=-15.0)
+
+# build N_pulse range-compressed traces
+N_pulse_int = int(N_pulse)
+pulses = np.empty((N_pulse_int, n_range), dtype=np.complex128)
+rng = np.random.default_rng(5)
+sig_pwr_ref = None
+for k in range(N_pulse_int):
+    y_e = echo(s, Fs, fc, target, SL_dB=200.0, n_out=n_range)
+    if sig_pwr_ref is None:
+        sig_pwr_ref = np.mean(np.abs(y_e[y_e != 0]) ** 2) if np.any(y_e != 0) else 1.0
+    sigma = noise_sigma_for_snr(sig_pwr_ref, snr_in_dB)
+    n = white_noise(n_range, sigma, rng=rng)
+    # slow-time phase ramp from inter-pulse Doppler progression
+    phase = np.exp(-2j * np.pi * (2 * v * fc / C_WATER) * k * PRI)
+    mf = matched_filter(y_e * phase + n, s)
+    pulses[k, :] = mf
+
+rd_dB, fd = range_doppler_map(pulses, PRI, window=True)
+v_axis = doppler_axis_velocity(fd, fc)
+r_axis = np.arange(n_range) / Fs * C_WATER / 2.0
+
+# annotate the true cell
+i_r = int(np.argmin(np.abs(r_axis - R0)))
+i_v = int(np.argmin(np.abs(v_axis - v)))
+
+fig, ax = plt.subplots(figsize=(8, 4.0))
+extent = [r_axis[0], r_axis[-1], v_axis[0], v_axis[-1]]
+im = ax.imshow(rd_dB, origin="lower", aspect="auto", extent=extent,
+               vmin=rd_dB.max() - 60, vmax=rd_dB.max(), cmap="viridis")
+ax.scatter([r_axis[i_r]], [v_axis[i_v]], facecolors="none",
+           edgecolors="red", s=120, lw=1.2, label="true target cell")
+ax.set_xlabel("range (m)"); ax.set_ylabel("radial velocity (m/s)")
+ax.set_title(f"range–Doppler map, N_pulse = {N_pulse_int}, PRI = {PRI:.1f} s")
+fig.colorbar(im, ax=ax, label="dB"); ax.legend(loc="upper right")
+plt.tight_layout(); plt.show()
+```
+
+## Step 10 — CA-CFAR detection
+
+Cell-averaging CFAR estimates the local noise power from a ring of
+training cells (with a small guard band around the cell under test),
+multiplies by $\alpha = N\bigl(P_\text{fa}^{-1/N}-1\bigr)$, and thresholds.
+We run it across the range axis of the peak Doppler bin and annotate
+detections on the RD map.
+
+```{pyodide}
+#| input: [B, tau, fc, R0, v, snr_in_dB, N_pulse, PRI, Pfa]
+import numpy as np, matplotlib.pyplot as plt
+from sonar.waveform import lfm_chirp
+from sonar.targets import Target, echo
+from sonar.noise import white_noise, noise_sigma_for_snr
+from sonar.matched_filter import matched_filter
+from sonar.range_doppler import range_doppler_map, doppler_axis_velocity
+from sonar.detection import ca_cfar_threshold, detect, roc_curve
+from sonar import C_WATER
+
+Fs = max(4 * B, 2 * fc)
+_, s = lfm_chirp(B, tau, Fs)
+
+n_range = int(2.0 * 1.5 * R0 / C_WATER * Fs) + s.size + 64
+target = Target(R0_m=R0, v_mps=v, TS_dB=-15.0)
+N_pulse_int = int(N_pulse)
+
+pulses = np.empty((N_pulse_int, n_range), dtype=np.complex128)
+rng = np.random.default_rng(6)
+sig_pwr_ref = None
+for k in range(N_pulse_int):
+    y_e = echo(s, Fs, fc, target, SL_dB=200.0, n_out=n_range)
+    if sig_pwr_ref is None:
+        sig_pwr_ref = np.mean(np.abs(y_e[y_e != 0]) ** 2) if np.any(y_e != 0) else 1.0
+    sigma = noise_sigma_for_snr(sig_pwr_ref, snr_in_dB)
+    n = white_noise(n_range, sigma, rng=rng)
+    phase = np.exp(-2j * np.pi * (2 * v * fc / C_WATER) * k * PRI)
+    pulses[k, :] = matched_filter(y_e * phase + n, s)
+
+rd_dB, fd = range_doppler_map(pulses, PRI, window=True)
+v_axis = doppler_axis_velocity(fd, fc)
+r_axis = np.arange(n_range) / Fs * C_WATER / 2.0
+
+# Linear-power RD map for CFAR
+rd_pwr = 10.0 ** (rd_dB / 10.0)
+
+# CFAR across range at each Doppler bin
+det_mask = np.zeros_like(rd_pwr, dtype=bool)
+for iv in range(rd_pwr.shape[0]):
+    th, _ = ca_cfar_threshold(rd_pwr[iv, :], train=16, guard=2, Pfa=Pfa)
+    det_mask[iv, :] = detect(rd_pwr[iv, :], th)
+
+fig, axes = plt.subplots(1, 2, figsize=(10, 3.6))
+extent = [r_axis[0], r_axis[-1], v_axis[0], v_axis[-1]]
+ax = axes[0]
+im = ax.imshow(rd_dB, origin="lower", aspect="auto", extent=extent,
+               vmin=rd_dB.max() - 60, vmax=rd_dB.max(), cmap="viridis")
+# overlay detections
+iv_det, ir_det = np.nonzero(det_mask)
+ax.scatter(r_axis[ir_det], v_axis[iv_det], s=12, marker="x",
+           color="red", alpha=0.8, label=f"CFAR hits (Pfa={Pfa:.0e})")
+ax.axvline(R0, color="w", ls=":", lw=0.7, alpha=0.6)
+ax.axhline(v,  color="w", ls=":", lw=0.7, alpha=0.6)
+ax.set_xlabel("range (m)"); ax.set_ylabel("radial velocity (m/s)")
+ax.set_title("RD map + CFAR detections")
+fig.colorbar(im, ax=ax, label="dB"); ax.legend(loc="upper right", fontsize=8)
+
+# ROC for this scenario (closed-form)
+ax = axes[1]
+snr_dB_range = np.linspace(-20, 20, 201)
+_, pd = roc_curve(snr_dB_range, n_pulses=N_pulse_int)
+ax.semilogy(snr_dB_range, pd, lw=1.5)
+ax.axvline(snr_in_dB, color="r", ls="--", lw=1,
+           label=f"current SNR = {snr_in_dB} dB")
+ax.set_xlabel("input SNR (dB)"); ax.set_ylabel("Pd")
+ax.set_title(f"ROC, Pfa = 1e-4, N_pulse = {N_pulse_int}")
+ax.set_ylim(1e-3, 1.1); ax.grid(alpha=0.3, which="both"); ax.legend()
+plt.tight_layout(); plt.show()
+```
+
+## How this works {.unnumbered}
+
+A quick tour of the stack, because the *mechanism* is the actual point of
+this document:
+
+- **[Quarto](https://quarto.org)** authors the page. The `.qmd` source
+  declares ten sections, eight interactive knobs, and a dozen code cells
+  that produce figures.
+- **[quarto-live](https://github.com/r-wasm/quarto-live)** adds a
+  `{pyodide}` code-cell type and an OJS-powered reactivity layer. Its
+  Lua filter wires cell inputs to OJS observables so each knob change
+  re-runs just the cells that depend on it.
+- **[Pyodide](https://pyodide.org)** is CPython 3.12 compiled to
+  WebAssembly. It runs in a worker thread, ships with NumPy/SciPy/
+  Matplotlib as precompiled wheels, and exposes a JavaScript ↔ Python
+  bridge (`from js import ...`) we use to read the current slider values.
+- **[OJS](https://quarto.org/docs/interactive/ojs/)** (Observable JS)
+  provides the reactive scheduler — `viewof B = Inputs.range(...)` is
+  enough to make `B` a first-class reactive value that Python cells
+  subscribe to.
+- **Our DSP code** lives in the `sonar/` Python package and is imported
+  by both the browser-side Pyodide runtime and the local `pytest` suite
+  that verifies the analytical invariants (chirp instantaneous frequency,
+  MF gain, MF delay localisation, Doppler-bin localisation, and
+  CA-CFAR's empirical $P_\text{fa}$).
+
+No servers, no notebooks, no kernels. The `report.html` file you are
+reading is fully self-contained: it embeds the Python source, the Pyodide
+wheels load from a CDN on first visit and then cache, and every figure
+you see was produced *in your browser*.
+
+### Repro in 30 seconds {.unnumbered}
+
+```bash
+git clone <this repo> && cd sonar-demo
+pip install -e .[dev]           # installs the sonar package + pytest
+pytest                          # 5 analytical checks
+quarto add r-wasm/quarto-live   # if not already present
+quarto render report.qmd        # writes _site/report.html
+```
+
+Host `_site/report.html` wherever you like (GitHub Pages, Netlify, S3,
+Quarto Pub, an HTTP server on a laptop, `file://` from disk). After the
+initial Pyodide download there are no network calls — the report runs
+offline.
+
+
+
+
+
+
+
+

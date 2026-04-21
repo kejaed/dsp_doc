@@ -1,0 +1,28 @@
+project:
+  type: default
+  output-dir: _site
+  pre-render: pre-render.py
+
+format:
+  live-html:
+    toc: true
+    toc-depth: 2
+    toc-location: left
+    code-fold: true
+    code-tools: true
+    code-overflow: wrap
+    embed-resources: true
+    theme: cosmo
+    fig-width: 8
+    fig-height: 4
+    smooth-scroll: true
+
+pyodide:
+  packages:
+    - numpy
+    - scipy
+    - matplotlib
+  resources:
+    - sonar
+  autorun: true
+  show-startup-message: true
