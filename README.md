@@ -1,5 +1,19 @@
 # Active-sonar DSP, in one interactive HTML file
 
+> **Re-rendering the published page.** The live site at
+> <https://kejaed.github.io/dsp_doc/> is served by GitHub Pages from
+> `master:/docs`. To update it:
+>
+> ```bash
+> quarto render report.qmd        # writes docs/index.html
+> git add docs/index.html
+> git commit -m "Re-render report"
+> git push origin master
+> ```
+>
+> Pages picks up the new commit automatically (~1 min). No Actions
+> workflow — the HTML in `docs/` is the artifact.
+
 An interactive Quarto report that walks through a textbook 10-step active
 sonar DSP chain — LFM chirp, spreading loss, echoes, reverb, noise,
 receive conditioning, matched filter, envelope + TVG, range–Doppler,
