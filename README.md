@@ -85,7 +85,7 @@ The five checks are analytical, not golden files:
 
 ```bash
 quarto render report.qmd
-open _site/report.html          # or xdg-open, or just drag into a browser
+open docs/index.html            # or xdg-open, or just drag into a browser
 ```
 
 The first load of the rendered HTML fetches the Pyodide runtime and its
@@ -95,15 +95,17 @@ under a second.
 
 ## Deploy
 
-`_site/report.html` is a single self-contained file — drop it anywhere
+`docs/index.html` is a single self-contained file — drop it anywhere
 that serves static HTML:
 
-- **GitHub Pages**: push the `_site/` directory (or the `report.html`)
-  to a `gh-pages` branch.
+- **GitHub Pages** (what this repo uses): Settings → Pages → Source:
+  "Deploy from a branch", Branch: `master`, Folder: `/docs`. The
+  `docs/.nojekyll` file is already committed so Pages won't mangle
+  Quarto's `_`-prefixed asset paths.
 - **Quarto Pub**: `quarto publish quarto-pub report.qmd`.
 - **Netlify / S3 / CloudFront / whatever**: upload the file.
-- **Locally**: `python -m http.server --directory _site` or even
-  open `_site/report.html` directly from the filesystem.
+- **Locally**: `python -m http.server --directory docs` or just open
+  `docs/index.html` directly from the filesystem.
 
 ## How it actually runs in your browser
 
