@@ -10,7 +10,7 @@ output-file: index.html
 ```{=html}
 <div class="build-tag" role="note">
   <span class="build-tag__label">Build</span>
-  <code class="build-tag__value">v4</code>
+  <code class="build-tag__value">v5</code>
 </div>
 <style>
   .build-tag {
@@ -181,8 +181,11 @@ if "/home/pyodide" not in sys.path:
     sys.path.insert(0, "/home/pyodide")
 
 import numpy as np
-import matplotlib
-matplotlib.use("AGG")
+# Don't force a matplotlib backend here: quarto-live installs its own
+# display hook (matplotlib_display.py) during Pyodide setup that
+# intercepts plt.show() and injects the figure into the cell's output.
+# Pinning AGG breaks that and triggers the
+# "FigureCanvasAgg is non-interactive" warning.
 import matplotlib.pyplot as plt
 import sonar
 print(f"sonar package mounted from {sonar.__file__}, c = {sonar.C_WATER} m/s")
