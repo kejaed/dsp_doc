@@ -27,3 +27,6 @@ pyodide:
     - sonar
   autorun: true
   show-startup-message: true
+  cell-options:
+    echo: false
+    edit: false

@@ -10,7 +10,7 @@ output-file: index.html
 ```{=html}
 <div class="build-tag" role="note">
   <span class="build-tag__label">Build</span>
-  <code class="build-tag__value">v6</code>
+  <code class="build-tag__value">v7</code>
 </div>
 <style>
   .build-tag {
@@ -119,7 +119,10 @@ document.addEventListener('DOMContentLoaded', function () {
       el.classList.add('is-ready');
       const title = el.querySelector('.pyo-loader__title');
       if (title) title.textContent = 'Loaded successfully';
-      stage.textContent = 'Please use the doc! Drag the sliders and watch the figures redraw.';
+      stage.textContent = 'Drag the sliders — figures redraw automatically.';
+      // Don't hold the banner: fade after a brief confirmation window.
+      setTimeout(function () { el.classList.add('is-hidden'); }, 2800);
+      setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 3800);
       return;
     }
     // Prefer quarto-live's own status text while Pyodide is still booting.
@@ -191,49 +194,75 @@ import sonar
 print("Sonar package loaded successfully.")
 ```
 
+::: {#controls-dock}
+
 ## Controls
 
-Slide the knobs and the figures below redo themselves. The four numbers
-beside the sliders are pure OJS arithmetic (no Python round-trip) and
-update as you drag.
-
-::: {.panel-tabset}
-
-### Waveform
-
 ```{ojs}
 //| echo: false
-viewof B = Inputs.range([100, 10000], {value: 4000, step: 100, label: "Bandwidth B (Hz)"})
-md`**Range resolution Δr = c/(2B) = ${(1500/(2*B)).toFixed(2)} m**`
-viewof tau = Inputs.range([0.01, 0.5], {value: 0.05, step: 0.005, label: "Pulse duration τ (s)"})
-md`**Time–bandwidth product B·τ = ${(B*tau).toFixed(0)}**, **MF gain 10·log₁₀(Bτ) = ${(10*Math.log10(B*tau)).toFixed(1)} dB**`
-```
-
-### Scenario
-
-```{ojs}
-//| echo: false
-viewof R0 = Inputs.range([100, 5000], {value: 1500, step: 25, label: "Target range R₀ (m)"})
-viewof v  = Inputs.range([-20, 20], {value: 5, step: 0.5, label: "Target velocity v (m/s)"})
-viewof snr_in_dB = Inputs.range([-20, 20], {value: -5, step: 1, label: "Input SNR (dB)"})
-viewof fc = Inputs.range([5000, 50000], {value: 20000, step: 1000, label: "Carrier fc (Hz)"})
+viewof B = Inputs.range([100, 10000], {value: 4000, step: 100, label: "B (Hz)"})
+md`Δr = c/(2B) = **${(1500/(2*B)).toFixed(2)} m**`
+viewof tau = Inputs.range([0.01, 0.5], {value: 0.05, step: 0.005, label: "τ (s)"})
+md`Bτ = **${(B*tau).toFixed(0)}**, MF gain = **${(10*Math.log10(B*tau)).toFixed(1)} dB**`
+viewof R0 = Inputs.range([100, 5000], {value: 1500, step: 25, label: "R₀ (m)"})
+viewof v  = Inputs.range([-20, 20], {value: 5, step: 0.5, label: "v (m/s)"})
+viewof snr_in_dB = Inputs.range([-20, 20], {value: -5, step: 1, label: "SNR (dB)"})
+viewof fc = Inputs.range([5000, 50000], {value: 20000, step: 1000, label: "fc (Hz)"})
 viewof PRI = Inputs.range([0.0005, 0.02], {value: 0.002, step: 0.0005, label: "PRI (s)"})
-N = 16  // pulses used in the readout below; the integration knob lives in step 9
-md`**PRI = ${(PRI*1000).toFixed(2)} ms**, **Doppler resolution Δv = λ/(2·N·PRI) = ${(1500/fc/(2*N*PRI)).toFixed(2)} m/s** (with N = ${N})`
-```
-
-### Detection
-
-```{ojs}
-//| echo: false
+N = 16
+md`PRI = **${(PRI*1000).toFixed(2)} ms**, Δv = **${(1500/fc/(2*N*PRI)).toFixed(2)} m/s** (N=${N})`
+viewof N_pulse = Inputs.select([1, 4, 16, 64], {value: 16, label: "N_pulse"})
 viewof Pfa_log = Inputs.range([-6, -2], {value: -4, step: 0.5, label: "log₁₀ Pfa"})
 Pfa = Math.pow(10, Pfa_log)
-md`**Design Pfa = ${Pfa.toExponential(1)}**`
-viewof N_pulse = Inputs.select([1, 4, 16, 64], {value: 16, label: "Pulses integrated"})
+md`Design Pfa = **${Pfa.toExponential(1)}**`
 viewof apply_mf = Inputs.toggle({value: true, label: "Apply matched filter"})
 ```
 
 :::
+
+```{=html}
+<style>
+  /* Sticky right-side controls dock on wide screens. On narrow screens
+     the panel reverts to inline flow. */
+  #controls-dock {
+    font-size: 0.86rem;
+  }
+  #controls-dock h2 {
+    margin-top: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    border-bottom: 1px solid #e4e7ec;
+    padding-bottom: 0.3rem;
+    margin-bottom: 0.5rem;
+  }
+  #controls-dock .observablehq--inspect,
+  #controls-dock form {
+    margin-bottom: 0.25rem;
+  }
+  @media (min-width: 1200px) {
+    main.content, main#quarto-document-content {
+      max-width: none;
+    }
+    #controls-dock {
+      position: fixed;
+      top: 1rem;
+      right: 1rem;
+      width: 320px;
+      max-height: calc(100vh - 2rem);
+      overflow-y: auto;
+      background: #fff;
+      border: 1px solid #e2e5eb;
+      border-radius: 8px;
+      padding: 0.7rem 1rem;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+      z-index: 50;
+    }
+    /* reserve the right gutter so main content doesn't slide under the panel */
+    body { padding-right: 360px; }
+  }
+</style>
+```
+
 
 ## Step 1 — Transmit waveform
 
@@ -361,41 +390,48 @@ that the input SNR (relative to the echo) matches the slider.
 ```{pyodide}
 #| input: [B, tau, fc, R0, v, snr_in_dB]
 import numpy as np, matplotlib.pyplot as plt
-from scipy.signal import welch
 from sonar.waveform import lfm_chirp
 from sonar.targets import Target, echo
 from sonar.reverberation import reverberation
 from sonar.noise import white_noise, noise_sigma_for_snr
 from sonar import C_WATER
 
+# Cap signal length for the PSD view. The scene buffer is only used for
+# PSD estimation here; no need to carry the full multi-ping timebase.
 Fs = max(4 * B, 2 * fc)
 _, s = lfm_chirp(B, tau, Fs)
-n_total = int(2.5 * 2 * R0 / C_WATER * Fs) + 8192
+n_total = min(int(2.0 * R0 / C_WATER * Fs) + 8192, 16384)
 
 target = Target(R0_m=R0, v_mps=v, TS_dB=-15.0)
 y_e = echo(s, Fs, fc, target, SL_dB=200.0, n_out=n_total)
 
 rng = np.random.default_rng(1)
-y_r = reverberation(n_total, Fs, B, decay_tau_s=0.4, rev_level=1e8, rng=rng)
+y_r = reverberation(n_total, Fs, B, decay_tau_s=0.2, rev_level=1e8, rng=rng)
 sig_pwr = np.mean(np.abs(y_e[y_e != 0]) ** 2) if np.any(y_e != 0) else 1.0
 sigma = noise_sigma_for_snr(sig_pwr, snr_in_dB)
 y_n = white_noise(n_total, sigma, rng=rng)
 x = y_e + y_r + y_n
 
-f, Pxx = welch(x, Fs, nperseg=4096, return_onesided=False)
-_, Pee = welch(y_e, Fs, nperseg=4096, return_onesided=False)
-_, Prr = welch(y_r, Fs, nperseg=4096, return_onesided=False)
-_, Pnn = welch(y_n, Fs, nperseg=4096, return_onesided=False)
-order = np.argsort(f)
+# Single-FFT periodogram, Hann-windowed. Cheap on memory (no segments,
+# no scipy.signal.welch allocations that misbehave in Pyodide's scipy).
+w = np.hanning(n_total)
+def psd(z):
+    Z = np.fft.fft(z * w)
+    return np.abs(Z) ** 2 / (Fs * (w * w).sum())
+f = np.fft.fftshift(np.fft.fftfreq(n_total, 1.0 / Fs))
+Pxx = np.fft.fftshift(psd(x))
+Pee = np.fft.fftshift(psd(y_e))
+Prr = np.fft.fftshift(psd(y_r))
+Pnn = np.fft.fftshift(psd(y_n))
 
 fig, ax = plt.subplots(figsize=(8, 3.5))
-ax.plot(f[order]/1e3, 10*np.log10(Pxx[order] + 1e-30), label="received x")
-ax.plot(f[order]/1e3, 10*np.log10(Pee[order] + 1e-30), label="echo only", alpha=0.7)
-ax.plot(f[order]/1e3, 10*np.log10(Prr[order] + 1e-30), label="reverb only", alpha=0.7)
-ax.plot(f[order]/1e3, 10*np.log10(Pnn[order] + 1e-30), label="noise only", alpha=0.7)
+ax.plot(f/1e3, 10*np.log10(Pxx + 1e-30), label="received x")
+ax.plot(f/1e3, 10*np.log10(Pee + 1e-30), label="echo only", alpha=0.7)
+ax.plot(f/1e3, 10*np.log10(Prr + 1e-30), label="reverb only", alpha=0.7)
+ax.plot(f/1e3, 10*np.log10(Pnn + 1e-30), label="noise only", alpha=0.7)
 ax.set_xlim(-Fs/2/1e3, Fs/2/1e3)
 ax.set_xlabel("baseband freq (kHz)"); ax.set_ylabel("PSD (dB)")
-ax.set_title(f"received PSD (Welch), input SNR = {snr_in_dB:.0f} dB")
+ax.set_title(f"received PSD, input SNR = {snr_in_dB:.0f} dB")
 ax.legend(loc="lower center", ncols=4, fontsize=8); ax.grid(alpha=0.3)
 plt.tight_layout(); plt.show()
 ```
@@ -410,7 +446,6 @@ shows the white noise tails getting cut.
 ```{pyodide}
 #| input: [B, tau, fc, R0, snr_in_dB]
 import numpy as np, matplotlib.pyplot as plt
-from scipy.signal import welch
 from sonar.waveform import lfm_chirp
 from sonar.targets import Target, echo
 from sonar.reverberation import reverberation
@@ -420,23 +455,28 @@ from sonar import C_WATER
 
 Fs = max(4 * B, 2 * fc)
 _, s = lfm_chirp(B, tau, Fs)
-n_total = int(2.5 * 2 * R0 / C_WATER * Fs) + 8192
+n_total = min(int(2.0 * R0 / C_WATER * Fs) + 8192, 16384)
 
 target = Target(R0_m=R0, v_mps=0.0, TS_dB=-15.0)
 y_e = echo(s, Fs, fc, target, SL_dB=200.0, n_out=n_total)
 rng = np.random.default_rng(2)
-y_r = reverberation(n_total, Fs, B, decay_tau_s=0.4, rev_level=1e8, rng=rng)
+y_r = reverberation(n_total, Fs, B, decay_tau_s=0.2, rev_level=1e8, rng=rng)
 sig_pwr = np.mean(np.abs(y_e[y_e != 0]) ** 2) if np.any(y_e != 0) else 1.0
 y_n = white_noise(n_total, noise_sigma_for_snr(sig_pwr, snr_in_dB), rng=rng)
 x = y_e + y_r + y_n
 x_bb = baseband_filter(x, Fs, B)
 
+w = np.hanning(n_total)
+def psd(z):
+    Z = np.fft.fft(z * w)
+    return np.abs(Z) ** 2 / (Fs * (w * w).sum())
+f = np.fft.fftshift(np.fft.fftfreq(n_total, 1.0 / Fs))
+
 fig, axes = plt.subplots(1, 2, figsize=(8, 3.0), sharey=True)
 for ax, sig, title in [(axes[0], x, "before bandpass"),
                        (axes[1], x_bb, "after baseband filter")]:
-    f, P = welch(sig, Fs, nperseg=4096, return_onesided=False)
-    o = np.argsort(f)
-    ax.plot(f[o]/1e3, 10*np.log10(P[o] + 1e-30))
+    P = np.fft.fftshift(psd(sig))
+    ax.plot(f/1e3, 10*np.log10(P + 1e-30))
     ax.axvline(-B/2/1e3, color="r", ls="--", lw=0.8, alpha=0.5)
     ax.axvline(+B/2/1e3, color="r", ls="--", lw=0.8, alpha=0.5)
     ax.set_xlabel("baseband freq (kHz)"); ax.set_title(title); ax.grid(alpha=0.3)
