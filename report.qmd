@@ -10,7 +10,7 @@ output-file: index.html
 ```{=html}
 <div class="build-tag" role="note">
   <span class="build-tag__label">Build</span>
-  <code class="build-tag__value">v8</code>
+  <code class="build-tag__value">v9</code>
 </div>
 <style>
   .build-tag {
@@ -129,7 +129,8 @@ document.addEventListener('DOMContentLoaded', function () {
     const live = document.getElementById('exercise-loading-status');
     const liveText = live && live.textContent && live.textContent.trim();
     if (liveText) {
-      stage.textContent = liveText;
+      // Rephrase "Downloading X" -> "Loading X" for the reader.
+      stage.textContent = liveText.replace(/^Downloading\b/i, 'Loading');
       return;
     }
     // quarto-live removes that element once Pyodide init is complete.
@@ -264,6 +265,47 @@ viewof apply_mf = Inputs.toggle({value: true, label: "Apply matched filter"})
 ```
 
 :::
+
+```{ojs}
+//| echo: false
+_slider_log = {
+  // Fires whenever any slider changes. Proves OJS observables are wired up.
+  console.log("[slider]", {
+    B, tau, R0, v, snr_in_dB, fc, PRI, N_pulse, Pfa_log, apply_mf
+  });
+  return null;
+}
+```
+
+```{=html}
+<script>
+// Instrument quarto-live's pyodideOjs.process so we see in the console
+// which pyodide cell re-runs when a slider moves. Has to wait for the
+// runtime to initialise before patching.
+(function () {
+  const patch = function () {
+    if (!window.pyodideOjs || window.pyodideOjs.__patched) return false;
+    const original = window.pyodideOjs.process;
+    if (typeof original !== 'function') return false;
+    window.pyodideOjs.process = function (ctx, inputs) {
+      try {
+        const id = ctx && ctx.options && ctx.options.id;
+        console.log('[pyodide]', id, 'inputs:', inputs);
+      } catch (e) {}
+      return original.call(this, ctx, inputs);
+    };
+    window.pyodideOjs.__patched = true;
+    console.log('[diag] pyodideOjs.process instrumented');
+    return true;
+  };
+  if (!patch()) {
+    const iv = setInterval(function () { if (patch()) clearInterval(iv); }, 200);
+    setTimeout(function () { clearInterval(iv); }, 30000);
+  }
+})();
+</script>
+```
+
 
 ```{=html}
 <style>
