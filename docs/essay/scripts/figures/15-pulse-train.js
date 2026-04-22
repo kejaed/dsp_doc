@@ -27,7 +27,19 @@ export function mount(root) {
   controls.className = "scene-controls";
   root.appendChild(controls);
 
-  const state = { N: 8, PRI_ms: 200, R0: 1500 };
+  // Target range has to fit inside one PRI for the echo to land back
+  // in the receive window before the next ping fires — that's a real
+  // sonar constraint, not a drawing convenience. We pick a short
+  // demo range so τ_d is well inside any PRI the reader can pick:
+  //
+  //    R0 = 150 m  →  τ_d = 2 R0 / c = 200 ms
+  //
+  // and then gate the PRI slider minimum at 250 ms so τ_d < PRI
+  // always.
+  const DEMO_R0 = 150;          // m
+  const TAU_D_MS = (2 * DEMO_R0 / C) * 1000;
+
+  const state = { N: 8, PRI_ms: 400 };
 
   makeSlider(controls, {
     min: 1, max: 32, value: state.N, step: 1,
@@ -35,7 +47,7 @@ export function mount(root) {
     onInput: (v) => { state.N = v; redraw(); },
   });
   makeSlider(controls, {
-    min: 50, max: 600, value: state.PRI_ms, step: 10,
+    min: 250, max: 800, value: state.PRI_ms, step: 10,
     label: "PRI", unit: " ms",
     onInput: (v) => { state.PRI_ms = v; redraw(); },
   });
@@ -58,25 +70,26 @@ export function mount(root) {
     const totalMs = Math.max(state.PRI_ms * state.N, state.PRI_ms * 1.2);
     const w = W - 2 * PAD;
     const tToX = (tms) => PAD + (tms / totalMs) * w;
-    const tau_d_ms = (2 * state.R0 / C) * 1000;
     for (let n = 0; n < state.N; n++) {
       const tTx = n * state.PRI_ms;
-      const tEcho = tTx + tau_d_ms;
+      const tEcho = tTx + TAU_D_MS;
       drawBurst(ctx, tToX(tTx), yMid, "#1f5fa8");
       if (tEcho < totalMs) {
         drawBurst(ctx, tToX(tEcho), yMid, "#cd3a2a");
       }
     }
 
-    // ticks
+    // ticks at each PRI boundary
     ctx.fillStyle = "rgba(0,0,0,0.45)";
     ctx.font = '10px -apple-system, sans-serif';
-    const tick = state.PRI_ms;
-    for (let t = 0; t <= totalMs; t += tick) {
+    for (let t = 0; t <= totalMs; t += state.PRI_ms) {
       const x = tToX(t);
       ctx.fillRect(x, RIBBON_H - 16, 1, 4);
     }
-    ctx.fillText(`PRI = ${state.PRI_ms} ms · N = ${state.N}`, PAD + 4, RIBBON_H - 4);
+    ctx.fillText(
+      `PRI = ${state.PRI_ms} ms · N = ${state.N} · τ_d = ${TAU_D_MS.toFixed(0)} ms (R₀ = ${DEMO_R0} m)`,
+      PAD + 4, RIBBON_H - 4
+    );
   }
 
   function drawMatrix() {
@@ -91,12 +104,10 @@ export function mount(root) {
 
     const rowH = (MATRIX_H - 28) / state.N;
     const fastWindowMs = state.PRI_ms;
-    const tau_d_ms = (2 * state.R0 / C) * 1000;
     const w = W - 2 * PAD;
     for (let n = 0; n < state.N; n++) {
       const yTop = 14 + n * rowH;
       const yMid = yTop + rowH / 2;
-      // soft row dividers
       ctx.strokeStyle = "rgba(0,0,0,0.05)";
       ctx.beginPath();
       ctx.moveTo(PAD, yTop);
@@ -104,19 +115,30 @@ export function mount(root) {
       ctx.stroke();
       // tx burst at t=0 of each row
       drawBurst(ctx, PAD + 8, yMid, "#1f5fa8", 0.5);
-      // echo at tau_d of each row, scaled to fastWindowMs
-      const xEcho = PAD + (tau_d_ms / fastWindowMs) * w;
-      if (xEcho < W - PAD - 4) {
-        drawBurst(ctx, xEcho, yMid, "#cd3a2a", 0.5);
-      }
+      // echo at τ_d of each row. τ_d < PRI by construction, so the
+      // echo column always sits inside the panel.
+      const xEcho = PAD + (TAU_D_MS / fastWindowMs) * w;
+      drawBurst(ctx, xEcho, yMid, "#cd3a2a", 0.5);
       ctx.fillStyle = "rgba(0,0,0,0.4)";
       ctx.font = '10px -apple-system, sans-serif';
       ctx.fillText(`#${n}`, 6, yMid + 3);
     }
+
+    // faint vertical guide to emphasise "the echoes line up because
+    // the target is at the same range every ping"
+    const xEchoCol = PAD + (TAU_D_MS / fastWindowMs) * w;
+    ctx.strokeStyle = "rgba(205, 58, 42, 0.35)";
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.moveTo(xEchoCol, 14);
+    ctx.lineTo(xEchoCol, MATRIX_H - 14);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
     // axis label
     ctx.fillStyle = "rgba(0,0,0,0.55)";
     ctx.font = '11px -apple-system, sans-serif';
-    ctx.fillText("fast time (within one PRI) →", PAD + 4, MATRIX_H - 4);
+    ctx.fillText(`fast time (within one PRI = ${state.PRI_ms} ms) →`, PAD + 4, MATRIX_H - 4);
     ctx.save();
     ctx.translate(W - 14, 14 + (MATRIX_H - 28) / 2 + 30);
     ctx.rotate(-Math.PI / 2);
