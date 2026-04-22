@@ -1,0 +1,186 @@
+/* ---------------------------------------------------------------------------
+   Sonar essay — typography, layout, figure chrome.
+   Vanilla CSS, desktop-first. No dark-mode pass yet.
+   --------------------------------------------------------------------------- */
+
+:root {
+  --bg: #fdfdfb;
+  --ink: #222;
+  --muted: #666;
+  --rule: #e8e8e8;
+  --warn-bg: #fff3cd;
+  --warn-edge: #f0c040;
+  --accent-hot: #cd3a2a;
+  --accent-cool: #1f5fa8;
+  --canvas-edge: #ececec;
+  --col: 720px;
+  --col-wide: 840px;
+}
+
+html, body {
+  background: var(--bg);
+  color: var(--ink);
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: Charter, "Iowan Old Style", "Source Serif Pro", Georgia, serif;
+  font-size: 18px;
+  line-height: 1.65;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+article {
+  max-width: var(--col);
+  margin: 2.5rem auto 6rem;
+  padding: 0 1.25rem;
+}
+
+header.title-block {
+  margin: 1.5rem 0 2.5rem;
+}
+header.title-block h1 {
+  font-size: 2.6rem;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  line-height: 1.1;
+  margin: 0 0 0.4rem;
+}
+header.title-block p.subtitle {
+  color: var(--muted);
+  font-style: italic;
+  font-size: 1.15rem;
+  margin: 0;
+}
+header.title-block .byline {
+  color: var(--muted);
+  font-size: 0.92rem;
+  margin-top: 0.7rem;
+}
+
+h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  margin: 3rem 0 0.6rem;
+  scroll-margin-top: 1rem;
+}
+h3 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: 2rem 0 0.5rem;
+}
+
+p {
+  margin: 0.8rem 0;
+}
+
+p + p {
+  text-indent: 0;
+}
+
+a {
+  color: var(--accent-cool);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(31, 95, 168, 0.25);
+}
+a:hover {
+  border-bottom-color: var(--accent-cool);
+}
+
+aside.audio-warning {
+  background: var(--warn-bg);
+  border-left: 3px solid var(--warn-edge);
+  padding: 0.7rem 1rem;
+  font-size: 0.9rem;
+  margin: 2rem 0;
+  border-radius: 0 4px 4px 0;
+}
+aside.audio-warning strong {
+  font-weight: 700;
+}
+
+/* Figures break the column slightly wider so the canvases breathe. */
+figure.scene {
+  margin: 2.2rem -3rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+}
+figure.scene canvas {
+  display: block;
+  background: #fff;
+  border: 1px solid var(--canvas-edge);
+  border-radius: 4px;
+  max-width: 100%;
+}
+figure.scene figcaption {
+  font-size: 0.87rem;
+  color: var(--muted);
+  font-style: italic;
+  text-align: center;
+  max-width: 640px;
+  line-height: 1.45;
+  order: 99;  /* mount JS appends canvas/controls after the figcaption in DOM order;
+                 the order rule keeps figcaption visually last regardless. */
+}
+
+.scene-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.1rem;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.92rem;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+.slider-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.slider-label {
+  color: var(--muted);
+}
+.slider-row input[type=range] {
+  width: 180px;
+  accent-color: var(--accent-cool);
+}
+.slider-readout {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  min-width: 56px;
+  display: inline-block;
+}
+.scene-button {
+  font: inherit;
+  padding: 0.28rem 0.85rem;
+  background: #fff;
+  color: var(--ink);
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.12s, border-color 0.12s;
+}
+.scene-button:hover {
+  background: #f3f3f3;
+  border-color: #999;
+}
+.scene-button.is-on {
+  background: var(--accent-cool);
+  color: #fff;
+  border-color: var(--accent-cool);
+}
+
+footer.essay-foot {
+  margin: 5rem 0 0;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--rule);
+  color: var(--muted);
+  font-size: 0.88rem;
+}
