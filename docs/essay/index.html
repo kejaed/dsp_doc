@@ -666,6 +666,84 @@
       </p>
     </section>
 
+    <section>
+      <h2>When to declare a target</h2>
+
+      <p>
+        The simplest answer is to set a threshold on the matched-filter output.
+        Anything above the line is "target", anything below is "no target". Drag
+        the threshold slider in the figure below; the figure tells you how the
+        decision goes.
+      </p>
+
+      <figure class="scene" data-figure="detection-threshold">
+        <figcaption>
+          One slice of MF magnitude vs range. The dashed line is the threshold;
+          green dots above the line near the dashed marker count as
+          <em>detections</em> of the true target, red dots elsewhere are
+          <em>false alarms</em>. Lower the threshold and you catch more targets
+          — but also more noise blips. Raise it and the false alarms vanish, but
+          you start missing real targets.
+        </figcaption>
+      </figure>
+
+      <p>
+        This is the central tradeoff of detection theory: probability of
+        detection (P<sub>d</sub>) vs probability of false alarm (P<sub>fa</sub>).
+        Drag the slider and you can pick any operating point on the curve, but
+        you cannot reduce both at once for a fixed input SNR.
+      </p>
+
+      <p>
+        A constant threshold has a more practical problem too: the noise floor
+        is rarely constant in range. Reverberation from the seafloor is loud at
+        short range and soft at long range. A threshold that gives the right
+        false-alarm rate at 4 km would give thousands of false alarms at 200 m.
+        We need a threshold that <em>tracks</em> the local noise.
+      </p>
+    </section>
+
+    <section>
+      <h2>CFAR — an adaptive threshold</h2>
+
+      <p>
+        The standard fix is called <em>constant false-alarm rate</em> detection
+        — CFAR. The idea: for each cell-under-test, estimate the local noise
+        power from a small ring of neighbouring cells (the "training cells"),
+        leaving a few "guard cells" around the cell-under-test so the target
+        itself doesn't pollute its own noise estimate. Multiply the local noise
+        estimate by a constant α and you have your threshold for that cell.
+        Repeat for every cell. The threshold curve adapts to whatever noise
+        floor it's running over.
+      </p>
+
+      <p>
+        For exponentially distributed noise power and N training cells, the
+        formula for α that gives a target false-alarm rate of P<sub>fa</sub> is
+        α = N (P<sub>fa</sub><sup>−1/N</sup> − 1). Both sliders below — design
+        P<sub>fa</sub> and the number of training cells — feed into this.
+      </p>
+
+      <figure class="scene" data-figure="cfar">
+        <figcaption>
+          Same MF trace; now the threshold (red curve) is computed locally from
+          the surrounding training cells. The bracketed shaded patches near the
+          centre show where, for one specific cell-under-test, the training
+          cells live. Lower P<sub>fa</sub> raises α and pushes the curve up;
+          more training cells lower the variance of the noise estimate (and let
+          you live closer to it).
+        </figcaption>
+      </figure>
+
+      <p>
+        CFAR is what every working sonar uses, in one variant or another (cell-
+        averaging, ordered-statistic, OS-CFAR for clutter edges, etc.). It
+        replaces a brittle, hand-tuned threshold with a knob that reads "how
+        much false-alarm rate can I tolerate" — which is the right question to
+        be asking.
+      </p>
+    </section>
+
     <footer class="essay-foot">
       <p>
         This essay is being written one block of figures at a time. The sections

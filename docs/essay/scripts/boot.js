@@ -19,6 +19,8 @@ import * as fig14 from "./figures/14-doppler-spectrum.js";
 import * as fig15 from "./figures/15-pulse-train.js";
 import * as fig16 from "./figures/16-coherent-integration.js";
 import * as fig17 from "./figures/17-rd-map.js";
+import * as fig18 from "./figures/18-detection-threshold.js";
+import * as fig19 from "./figures/19-cfar.js";
 
 const registry = {
   "pressure-wave": fig01,
@@ -38,6 +40,8 @@ const registry = {
   "pulse-train": fig15,
   "coherent-integration": fig16,
   "rd-map": fig17,
+  "detection-threshold": fig18,
+  "cfar": fig19,
 };
 
 function bootFigures() {
