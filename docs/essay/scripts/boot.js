@@ -12,6 +12,8 @@ import * as fig07 from "./figures/07-resolution-problem.js";
 import * as fig08 from "./figures/08-bandwidth.js";
 import * as fig09 from "./figures/09-chirp.js";
 import * as fig10 from "./figures/10-spectrogram.js";
+import * as fig11 from "./figures/11-matched-filter.js";
+import * as fig12 from "./figures/12-mf-with-noise.js";
 
 const registry = {
   "pressure-wave": fig01,
@@ -24,6 +26,8 @@ const registry = {
   "bandwidth": fig08,
   "chirp": fig09,
   "spectrogram": fig10,
+  "matched-filter": fig11,
+  "mf-with-noise": fig12,
 };
 
 function bootFigures() {

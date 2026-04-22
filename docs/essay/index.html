@@ -385,6 +385,103 @@
       </p>
     </section>
 
+    <section>
+      <h2>The matched filter</h2>
+
+      <p>
+        We send a long chirp to put energy in the water; we want a short, sharp peak
+        on the receive side so we can pin down the target's range to within a metre
+        or two. The piece of mathematics that does that conversion is the
+        <em>matched filter</em>. It is the most important idea in this essay, and
+        once you've seen it work, you understand most of why active sonar exists in
+        its modern form at all.
+      </p>
+
+      <p>
+        The matched filter is, simply, a cross-correlation of the received signal
+        with a copy of the transmit waveform. Slide the reference chirp along the
+        receive trace; at each shift, multiply the two point-by-point and sum. When
+        the shift lines up exactly with the actual delay of the echo, every wiggle
+        in the echo lines up with the corresponding wiggle in the reference, the
+        products are all positive, and the sum is huge. At any other shift, the
+        wiggles are misaligned and the products mostly cancel — the sum is tiny.
+        The output of the cross-correlation, as a function of shift, has one big
+        spike where the echo actually lives and is small everywhere else.
+      </p>
+
+      <figure class="scene" data-figure="matched-filter">
+        <figcaption>
+          Three traces. Top: the transmit chirp itself — a long, smeared waveform.
+          Middle: the receive trace, which contains a single delayed copy of that
+          chirp at the target's range. Bottom: the matched-filter output. The
+          long, smeared echo has been replaced by a single sharp peak right at
+          the dashed marker. Drag the target range slider; both the echo and the
+          peak slide together.
+        </figcaption>
+      </figure>
+
+      <p>
+        Notice three things. First, the peak in the bottom plot is at the
+        target's true delay, regardless of what the input looks like. Second, the
+        peak's <em>width</em> is set by the chirp's bandwidth, not its duration —
+        which is exactly the bandwidth-equals-resolution claim from §8 finally
+        delivered. Third, the area under the spike is the same as the area under
+        the long echo before processing — the matched filter rearranges energy
+        from a long, low pulse into a short, tall one. It doesn't manufacture
+        energy; it just concentrates it.
+      </p>
+    </section>
+
+    <section>
+      <h2>What noise does</h2>
+
+      <p>
+        So far the receiver has been quiet — only the echo, only the target. In
+        practice, every receiver hears a low background of random pressure
+        fluctuations: the ocean's own noise (waves, biology, ships), the
+        electronic noise floor of the amplifier, and so on. We model all of that
+        as a Gaussian random process added to the received signal.
+      </p>
+
+      <p>
+        This is where the matched filter starts to look like magic. The bottom
+        slider controls the input SNR: positive numbers mean the echo dominates
+        the noise; negative numbers mean the noise dominates the echo. At low SNR
+        the raw receive trace looks like static — you can't pick out the chirp by
+        eye at all. But the matched-filter output below it still has the target
+        peak.
+      </p>
+
+      <figure class="scene" data-figure="mf-with-noise">
+        <figcaption>
+          Top: the receive trace with the echo buried under noise. Bottom: the
+          matched-filter output. Drop the input SNR to −15 dB or below — the
+          target is invisible up top but the peak is still resolvable in the MF
+          output. The processing gain is roughly 10 log₁₀(<i>B</i>·τ); for our
+          chirp that's about 14 dB of free SNR, on top of whatever the input
+          already had.
+        </figcaption>
+      </figure>
+
+      <p>
+        Why does this work? The matched filter is provably the optimal linear
+        operation for detecting a known waveform in white Gaussian noise — it
+        maximises the peak-output-SNR among all linear filters. The intuition is
+        that it weights every received sample by how much "signal" we expect to
+        see there, and it happens that the optimal weighting is just a copy of
+        the signal itself. There's a careful proof; for our purposes it's enough
+        to know that you cannot do better with a fixed pulse shape and a Gaussian
+        noise floor.
+      </p>
+
+      <p>
+        With the matched filter we have everything we need to find a stationary
+        target: send the chirp, correlate the echo with a reference, look for
+        a peak, read off its delay, divide by 2/<i>c</i>, and we have a range.
+        The next thing to ask is what happens if the target isn't stationary.
+      </p>
+    </section>
+
     <footer class="essay-foot">
       <p>
         This essay is being written one block of figures at a time. The sections
