@@ -36,7 +36,7 @@ const SNR_DB = -2;
 
 // Pre-computed across all pulses for the cycle. We'll regenerate when
 // the user clicks "replay" so the noise reseeds.
-const cached = { mfMag: [], rdMatrix: null, mxRD: 1, soundOn: true };
+const cached = { mfMag: [], rdMatrix: null, mxRD: 1, soundOn: false };
 
 function buildAll() {
   const chirp = lfmChirp(B_HZ, TAU_S, FS);
@@ -120,10 +120,13 @@ export function mount(root) {
       }
     },
   });
-  let muteAudio = makeToggle(controls, {
-    labelOff: "mute audio", labelOn: "audio muted",
+  // Audio is strictly opt-in: default off, the toggle turns it on.
+  // Every other figure in the essay follows this rule (explicit click
+  // before any sound), so the finale shouldn't break it.
+  makeToggle(controls, {
+    labelOff: "play with audio", labelOn: "audio on",
     value: false,
-    onToggle: (on) => { cached.soundOn = !on; },
+    onToggle: (on) => { cached.soundOn = on; },
   });
 
   const range_max_m = (N_OUT / FS) * C_WATER / 2;
