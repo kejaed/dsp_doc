@@ -482,16 +482,331 @@
       </p>
     </section>
 
+    <section>
+      <h2>A target on the move</h2>
+
+      <p>
+        If the target is moving toward or away from us at a radial speed <i>v</i>,
+        each cycle of the returning wave is squeezed (toward) or stretched (away)
+        relative to what we sent. The echo carrier shifts in frequency by
+      </p>
+
+      <p style="text-align: center; margin: 1.2rem 0; font-size: 1.15rem;">
+        <i>f</i><sub><i>d</i></sub>&nbsp;=&nbsp;−2·<i>v</i>·<i>f</i><sub><i>c</i></sub>/<i>c</i>.
+      </p>
+
+      <p>
+        The factor of two is because the wave makes the trip twice — out, then
+        back — and each leg picks up the same fractional Doppler. The minus sign
+        is a convention choice (we'll take positive <i>v</i> = receding, which
+        gives a downward shift). Plugging in numbers: at <i>f</i><sub><i>c</i></sub>
+        = 1 kHz, a target receding at 5 m/s shifts the echo by about −7 Hz. Small
+        in absolute terms; large enough to detect easily.
+      </p>
+
+      <figure class="scene" data-figure="doppler">
+        <figcaption>
+          A receding target. The transmit pulse (cool) goes out at <i>f</i><sub><i>c</i></sub>;
+          the echo (hot) comes back at <i>f</i><sub><i>c</i></sub>+<i>f</i><sub><i>d</i></sub>.
+          Drag the velocity slider; press <em>play tx + echo</em> to hear the pitch
+          difference. Negative velocities (approaching targets) raise the echo
+          pitch; positive velocities lower it.
+        </figcaption>
+      </figure>
+
+      <p>
+        The Doppler shift is simultaneously a problem and an opportunity. A
+        problem because the matched filter we just built was tuned to the exact
+        transmit frequency content — feed it a Doppler-shifted echo and the
+        correlation peak shrinks (the wiggles no longer line up exactly). An
+        opportunity because if we can <em>measure</em> <i>f</i><sub><i>d</i></sub>
+        we get the target's radial velocity for free, on top of its range.
+      </p>
+    </section>
+
+    <section>
+      <h2>The Doppler spectrum</h2>
+
+      <p>
+        Measuring <i>f</i><sub><i>d</i></sub> from the echo of a single short ping
+        is hard, because the ping itself only has so much frequency resolution
+        (uncertainty principle, again — its spectrum is roughly 1/τ wide). At τ
+        = 30 ms our spectrum is ~30 Hz wide. A ±5 Hz Doppler shift moves the
+        whole spectrum by less than a single FFT bin; you would not notice.
+      </p>
+
+      <p>
+        The figure below cheats a little to make the picture intuitive: it shows
+        the spectrum of a long, sustained tone burst at the <em>echo's</em>
+        frequency, so the spectral peak is narrow enough to see slide as you
+        adjust velocity.
+      </p>
+
+      <figure class="scene" data-figure="doppler-spectrum">
+        <figcaption>
+          The echo's spectrum, with a marker showing where the transmit frequency
+          sat. As the target's velocity changes, the echo line slides along the
+          frequency axis by <i>f</i><sub><i>d</i></sub> = −2<i>v</i>·<i>f</i><sub><i>c</i></sub>/<i>c</i>.
+          For a real, short ping you would not see this peak motion in a single
+          spectrum — the next section will explain how to get the resolution we need.
+        </figcaption>
+      </figure>
+
+      <p>
+        The trick to making Doppler measurable from short pings is to fire
+        <em>many</em> of them, evenly spaced in time, and use the long
+        observation interval to get the frequency resolution we lack within a
+        single ping. That's what the next three sections build up.
+      </p>
+    </section>
+
+    <section>
+      <h2>A train of pings</h2>
+
+      <p>
+        Modern sonars don't fire one ping; they fire a sequence — every PRI
+        seconds (PRI for <em>pulse repetition interval</em>) for as long as the
+        operator wants. Each ping comes back, the receiver matched-filters it,
+        and the result is one row in a stack of receive traces. Two natural axes
+        appear: <em>fast time</em> across each row (where in the row is the echo
+        — that's range), and <em>slow time</em> down the stack (which ping number
+        — that turns out to be Doppler).
+      </p>
+
+      <figure class="scene" data-figure="pulse-train">
+        <figcaption>
+          Top: the transmit timeline laid out flat — N pings spaced PRI apart,
+          with their corresponding red echoes. Bottom: the same data reorganised
+          as a matrix. Each row is one ping's receive trace; the echo column
+          stays put across all rows because the target is at a fixed range. This
+          matrix is the input to the next two figures.
+        </figcaption>
+      </figure>
+
+      <p>
+        At a fixed range bin (a vertical column of the matrix), the echo's value
+        from ping to ping is not constant — it picks up the inter-pulse Doppler
+        phase exp(<i>j</i> 2π <i>f</i><sub><i>d</i></sub> · <i>k</i> · PRI) for
+        the <i>k</i>-th ping. The rate at which that phase advances along the
+        slow-time axis <em>is</em> the Doppler frequency. We just need to do an
+        FFT down each column.
+      </p>
+    </section>
+
+    <section>
+      <h2>Coherent integration</h2>
+
+      <p>
+        Before doing the column FFT, here is a closely related trick that's worth
+        a figure of its own: <em>coherent averaging</em>. Sum the matched-filter
+        outputs from N pings (treating them as complex signals — phase and all)
+        and divide by N. The target peak is in the same place every time, so it
+        adds constructively; the noise has random phase, so it adds destructively.
+        After N pulses, target amplitude is unchanged; noise standard deviation
+        drops by √N. The peak-to-noise ratio improves by 10·log₁₀(N) dB.
+      </p>
+
+      <figure class="scene" data-figure="coherent-integration">
+        <figcaption>
+          Top: matched-filter output from a single noisy ping — the target is
+          weak. Bottom: coherent average of N independent realisations of the
+          same scene. Slide N from 1 to 64; the target peak rises by 18 dB
+          (= 10·log₁₀ 64) above the noise while the noise floor itself slowly
+          settles. Same trick a long-exposure camera uses: noise averages, the
+          signal builds.
+        </figcaption>
+      </figure>
+
+      <p>
+        Coherent integration is what we get for stacking pings that all look the
+        same. But pings from a <em>moving</em> target don't all look the same —
+        they have a slowly rotating phase. If we could un-rotate them and then
+        sum, we'd get the same gain. The way to do that, for an unknown
+        velocity, is to try every plausible Doppler shift simultaneously, which
+        is just an FFT.
+      </p>
+    </section>
+
+    <section>
+      <h2>The range–Doppler map</h2>
+
+      <p>
+        The combination of "stack N pings" and "FFT each column" produces the
+        <em>range–Doppler map</em>: a 2-D image with range across, radial
+        velocity up, and brightness equal to how much energy is at that
+        range-velocity cell. A target at (<i>R</i><sub>0</sub>, <i>v</i>) shows
+        up as a bright dot at the corresponding pixel; everywhere else the map
+        is just integrated noise.
+      </p>
+
+      <figure class="scene" data-figure="rd-map">
+        <figcaption>
+          The range–Doppler map. Move the target slider; the bright spot moves
+          with it. The white circle shows where the target actually is — it
+          should sit on top of the brightness peak. Increasing N raises the
+          peak above the noise floor; increasing PRI improves Doppler
+          resolution at the cost of range ambiguity.
+        </figcaption>
+      </figure>
+
+      <p>
+        Notice that PRI and bandwidth play parallel roles for Doppler and range:
+        bandwidth × duration sets fast-time (range) resolution, and N · PRI
+        (the total observation time) sets slow-time (Doppler) resolution. The
+        rest of sonar engineering is largely a fight between these two — fine
+        Doppler wants long observation, fine range wants wide bandwidth, and
+        you can never have everything you want.
+      </p>
+
+      <p>
+        With the RD map, we know <em>where</em> a target is in the
+        range-velocity grid if there is one. The remaining question is: how
+        bright does a cell have to be before we believe it's actually a target
+        and not a noise fluctuation?
+      </p>
+    </section>
+
+    <section>
+      <h2>When to declare a target</h2>
+
+      <p>
+        The simplest answer is to set a threshold on the matched-filter output.
+        Anything above the line is "target", anything below is "no target". Drag
+        the threshold slider in the figure below; the figure tells you how the
+        decision goes.
+      </p>
+
+      <figure class="scene" data-figure="detection-threshold">
+        <figcaption>
+          One slice of MF magnitude vs range. The dashed line is the threshold;
+          green dots above the line near the dashed marker count as
+          <em>detections</em> of the true target, red dots elsewhere are
+          <em>false alarms</em>. Lower the threshold and you catch more targets
+          — but also more noise blips. Raise it and the false alarms vanish, but
+          you start missing real targets.
+        </figcaption>
+      </figure>
+
+      <p>
+        This is the central tradeoff of detection theory: probability of
+        detection (P<sub>d</sub>) vs probability of false alarm (P<sub>fa</sub>).
+        Drag the slider and you can pick any operating point on the curve, but
+        you cannot reduce both at once for a fixed input SNR.
+      </p>
+
+      <p>
+        A constant threshold has a more practical problem too: the noise floor
+        is rarely constant in range. Reverberation from the seafloor is loud at
+        short range and soft at long range. A threshold that gives the right
+        false-alarm rate at 4 km would give thousands of false alarms at 200 m.
+        We need a threshold that <em>tracks</em> the local noise.
+      </p>
+    </section>
+
+    <section>
+      <h2>CFAR — an adaptive threshold</h2>
+
+      <p>
+        The standard fix is called <em>constant false-alarm rate</em> detection
+        — CFAR. The idea: for each cell-under-test, estimate the local noise
+        power from a small ring of neighbouring cells (the "training cells"),
+        leaving a few "guard cells" around the cell-under-test so the target
+        itself doesn't pollute its own noise estimate. Multiply the local noise
+        estimate by a constant α and you have your threshold for that cell.
+        Repeat for every cell. The threshold curve adapts to whatever noise
+        floor it's running over.
+      </p>
+
+      <p>
+        For exponentially distributed noise power and N training cells, the
+        formula for α that gives a target false-alarm rate of P<sub>fa</sub> is
+        α = N (P<sub>fa</sub><sup>−1/N</sup> − 1). Both sliders below — design
+        P<sub>fa</sub> and the number of training cells — feed into this.
+      </p>
+
+      <figure class="scene" data-figure="cfar">
+        <figcaption>
+          Same MF trace; now the threshold (red curve) is computed locally from
+          the surrounding training cells. The bracketed shaded patches near the
+          centre show where, for one specific cell-under-test, the training
+          cells live. Lower P<sub>fa</sub> raises α and pushes the curve up;
+          more training cells lower the variance of the noise estimate (and let
+          you live closer to it).
+        </figcaption>
+      </figure>
+
+      <p>
+        CFAR is what every working sonar uses, in one variant or another (cell-
+        averaging, ordered-statistic, OS-CFAR for clutter edges, etc.). It
+        replaces a brittle, hand-tuned threshold with a knob that reads "how
+        much false-alarm rate can I tolerate" — which is the right question to
+        be asking.
+      </p>
+    </section>
+
+    <section>
+      <h2>Putting it together</h2>
+
+      <p>
+        That is the entire pipeline. Watch it run.
+      </p>
+
+      <figure class="scene" data-figure="finale">
+        <figcaption>
+          Six panels. Top: a transducer firing pings at a target. Then the raw
+          receive trace, a single-pulse matched-filter output, the slow-time
+          stack, the integrated MF (peak rising as pulses accumulate), and
+          finally the CFAR step that says <em>DETECTED</em>. Audio plays one
+          tick per ping; mute it from the controls. Press <em>replay</em> to
+          re-roll the noise and watch the cycle again.
+        </figcaption>
+      </figure>
+
+      <p>
+        Every working active sonar in the world is some elaborated version of
+        what just played. The chirp is fancier (it might be hyperbolic, it
+        might be split into a tracking ping and a search ping); the receive
+        chain has a beamformer in front of the matched filter (because the
+        transducer is actually an array, not a single hydrophone, and you want
+        bearing as well as range); the CFAR is replaced with something that
+        also handles clutter edges and multiple-target windows; the operator
+        gets to draw boxes on the RD map to mark contacts of interest. But the
+        spine — pressure wave, echo, time-of-flight gives range, bandwidth
+        gives resolution, matched filter gives processing gain, slow-time FFT
+        gives Doppler, threshold gives a binary decision — that spine is
+        everything in this essay, and that spine has been the same since the
+        1950s.
+      </p>
+
+      <p>
+        The thing that keeps changing is what's <em>around</em> the pipeline.
+        Sea-state estimation. Adaptive arrays. Tracking algorithms that follow
+        a contact across many ping cycles. Bistatic operation, where one ship
+        transmits and another receives. Matched-field processing that exploits
+        ocean-acoustic channel structure to localise targets directly without
+        the range-Doppler intermediate step. Each of those is a research
+        career on its own, and each of them sits on top of the diagram you
+        just watched run. The hardest, slowest, most fundamental ideas are at
+        the bottom; the work on top stands on a fairly small number of them.
+      </p>
+
+      <p>
+        You now know what those ideas are.
+      </p>
+    </section>
+
     <footer class="essay-foot">
       <p>
-        This essay is being written one block of figures at a time. The sections
-        coming next — range resolution, the chirp trick, matched filtering,
-        Doppler, range–Doppler maps, CFAR detection — get added as they ship. See
-        <a href="PLAN.md">PLAN.md</a> for the full outline.
+        This essay is the JavaScript-only sibling of the
+        <a href="../">interactive Pyodide-backed Quarto report</a> at
+        <code>/dsp_doc/</code>. Same DSP, different rendering philosophy: that
+        one runs Python in your browser; this one builds every figure with
+        a small custom JS DSP toolkit. No build step, no framework, no CDN.
       </p>
       <p>
-        Source: <a href="https://github.com/kejaed/dsp_doc">github.com/kejaed/dsp_doc</a>,
-        branch <code>ciechanow-style</code>.
+        Source: <a href="https://github.com/kejaed/dsp_doc">github.com/kejaed/dsp_doc</a>.
+        See <a href="PLAN.md">PLAN.md</a> for the original outline and notes on
+        the directory layout.
       </p>
     </footer>
 

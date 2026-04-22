@@ -14,6 +14,14 @@ import * as fig09 from "./figures/09-chirp.js";
 import * as fig10 from "./figures/10-spectrogram.js";
 import * as fig11 from "./figures/11-matched-filter.js";
 import * as fig12 from "./figures/12-mf-with-noise.js";
+import * as fig13 from "./figures/13-doppler.js";
+import * as fig14 from "./figures/14-doppler-spectrum.js";
+import * as fig15 from "./figures/15-pulse-train.js";
+import * as fig16 from "./figures/16-coherent-integration.js";
+import * as fig17 from "./figures/17-rd-map.js";
+import * as fig18 from "./figures/18-detection-threshold.js";
+import * as fig19 from "./figures/19-cfar.js";
+import * as fig20 from "./figures/20-finale.js";
 
 const registry = {
   "pressure-wave": fig01,
@@ -28,6 +36,14 @@ const registry = {
   "spectrogram": fig10,
   "matched-filter": fig11,
   "mf-with-noise": fig12,
+  "doppler": fig13,
+  "doppler-spectrum": fig14,
+  "pulse-train": fig15,
+  "coherent-integration": fig16,
+  "rd-map": fig17,
+  "detection-threshold": fig18,
+  "cfar": fig19,
+  "finale": fig20,
 };
 
 function bootFigures() {
