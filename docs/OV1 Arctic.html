@@ -1,0 +1,910 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>OV-1 — Canadian Arctic USV/UAV Operations</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cesium@1.119.0/Build/Cesium/Widgets/widgets.css" />
+<script src="https://cdn.jsdelivr.net/npm/cesium@1.119.0/Build/Cesium/Cesium.js"></script>
+<style>
+  :root{
+    --bg:#05080d;
+    --panel: rgba(10,16,24,0.78);
+    --panel-border: rgba(140,170,200,0.18);
+    --ink:#e6eef7;
+    --dim:#9fb0c3;
+    --roc:#ffd800;       /* yellow diamond */
+    --mod:#6fd2ff;       /* light blue diamond */
+    --port:#ff2bd6;      /* magenta diamond */
+    --primary:#ff3838;   /* SATCOM primary (red) */
+    --alt:#22e06a;       /* SATCOM alternate (green) */
+    --mod-net:#ff8a3d;   /* MOD Secure Network (orange) */
+    --coverage:#79e3d6;  /* USV coverage teal */
+    --sonar:#6cd0ff;     /* passive sonar blue */
+    --active:#ff4a4a;    /* active ping red */
+  }
+  html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--ink);
+    font-family: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;}
+  #cesium{position:absolute; inset:0;}
+  .cesium-viewer-bottom, .cesium-viewer-toolbar, .cesium-viewer-animationContainer,
+  .cesium-viewer-timelineContainer, .cesium-viewer-fullscreenContainer,
+  .cesium-viewer-geocoderContainer, .cesium-viewer-selectionIndicatorContainer,
+  .cesium-viewer-infoBoxContainer, .cesium-navigationHelpButton-wrapper { display:none !important; }
+
+  /* Title */
+  .title{
+    position:absolute; top:18px; left:20px; z-index:5;
+    letter-spacing:.14em; text-transform:uppercase; font-size:11px; color:var(--dim);
+  }
+  .title b{display:block; font-size:16px; letter-spacing:.02em; color:var(--ink); text-transform:none; margin-top:4px; font-weight:600;}
+  .title .tag{display:inline-block; margin-top:6px; padding:2px 6px; border:1px solid var(--panel-border);
+    border-radius:3px; font-size:10px; color:var(--dim); letter-spacing:.18em;}
+
+  /* Legend */
+  .legend{
+    position:absolute; right:18px; bottom:18px; z-index:5;
+    background:var(--panel); border:1px solid var(--panel-border);
+    padding:12px 14px; border-radius:6px; min-width:270px;
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    box-shadow: 0 10px 40px rgba(0,0,0,.5);
+  }
+  .legend h4{margin:0 0 8px 0; font-size:10px; letter-spacing:.22em; color:var(--dim); font-weight:600; text-transform:uppercase;}
+  .legend .row{display:flex; align-items:center; gap:10px; font-size:12px; padding:3px 0; color:var(--ink);}
+  .legend .sw{width:22px; display:flex; justify-content:center; flex:0 0 22px;}
+  .dia{width:10px;height:10px;transform:rotate(45deg); display:inline-block;}
+  .dash{width:22px;height:0;border-top:2px dashed;}
+  .solid{width:22px;height:0;border-top:2px solid;}
+  .arrow{width:22px;display:flex;align-items:center;justify-content:space-between;}
+  .arrow::before,.arrow::after{content:""; display:inline-block; width:0;height:0;
+    border-top:4px solid transparent; border-bottom:4px solid transparent;}
+  .arrow::before{border-right:6px solid currentColor;}
+  .arrow::after{border-left:6px solid currentColor;}
+  .arrow .mid{flex:1; height:0; border-top:2px solid currentColor; margin:0 1px;}
+  .cov{width:22px;height:10px;border-radius:50%;}
+
+  /* Status strip */
+  .status{
+    position:absolute; left:20px; bottom:18px; z-index:5;
+    background:var(--panel); border:1px solid var(--panel-border);
+    padding:10px 14px; border-radius:6px; font-size:11px;
+    display:flex; gap:18px; align-items:center;
+    backdrop-filter: blur(8px);
+  }
+  .status .item{display:flex; flex-direction:column; line-height:1.25;}
+  .status .lbl{color:var(--dim); font-size:9px; letter-spacing:.22em; text-transform:uppercase;}
+  .status .val{color:var(--ink); font-weight:600;}
+  .status .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--alt);box-shadow:0 0 8px var(--alt); margin-right:6px;
+    animation:pulse 2s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+
+  /* Tweaks */
+  .tweaks{
+    position:absolute; top:18px; right:18px; z-index:6;
+    background:var(--panel); border:1px solid var(--panel-border);
+    padding:12px 14px; border-radius:6px; width:230px;
+    backdrop-filter: blur(8px);
+    display:none;
+  }
+  .tweaks.on{display:block;}
+  .tweaks h4{margin:0 0 10px 0; font-size:10px; letter-spacing:.22em; color:var(--dim); font-weight:600; text-transform:uppercase;}
+  .tweaks label{display:flex; justify-content:space-between; align-items:center; font-size:11px; color:var(--ink); padding:5px 0;}
+  .tweaks input[type=checkbox]{accent-color:#6fd2ff;}
+  .tweaks select, .tweaks input[type=range]{background:#0a1520; color:var(--ink); border:1px solid var(--panel-border); border-radius:3px; font-size:11px; padding:2px 4px;}
+  .tweaks .btn{width:100%; margin-top:8px; background:#122033; color:var(--ink); border:1px solid var(--panel-border);
+    padding:6px 10px; border-radius:4px; font-size:11px; cursor:pointer; letter-spacing:.08em;}
+  .tweaks .btn:hover{background:#1a2d47;}
+
+  .hint{
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    color:var(--dim); font-size:13px; letter-spacing:.1em; text-transform:uppercase;
+    pointer-events:none; z-index:2; opacity:.7;
+  }
+</style>
+</head>
+<body>
+<div id="cesium"></div>
+
+<div id="camdebug" style="position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:50;background:rgba(6,10,18,.82);border:1px solid #233247;border-radius:8px;padding:8px 12px;font:600 11px 'JetBrains Mono',ui-monospace,monospace;color:#b7c6da;letter-spacing:.02em;display:none;gap:16px;align-items:center;backdrop-filter:blur(6px);pointer-events:none">
+  <span style="color:#ffd24a">CAM</span>
+  <span>lon <b id="cd-lon" style="color:#e6eef7">—</b></span>
+  <span>lat <b id="cd-lat" style="color:#e6eef7">—</b></span>
+  <span>alt <b id="cd-alt" style="color:#e6eef7">—</b></span>
+  <span>hdg <b id="cd-hdg" style="color:#e6eef7">—</b></span>
+  <span>pit <b id="cd-pit" style="color:#e6eef7">—</b></span>
+  <button id="cd-copy" style="background:#1b2a42;border:1px solid #2e4568;color:#79e3d6;padding:3px 8px;border-radius:4px;font:inherit;cursor:pointer;pointer-events:auto">copy</button>
+</div>
+
+<div class="title">
+  <span>Operational View — OV-1</span>
+  <b>Canadian Arctic Maritime ISR · USV + UAV</b>
+  <span class="tag">UNCLASSIFIED // ILLUSTRATIVE</span>
+</div>
+
+<div class="legend">
+  <h4>Legend</h4>
+  <div class="row"><span class="sw"><span class="dia" style="background:#6fd2ff;border:1px solid #fff;"></span></span> DND Operations Centre (MOD)</div>
+  <div class="row"><span class="sw"><span class="dia" style="background:#ffd800;border:1px solid #fff;"></span></span> Remote Operations Centre (Halifax)</div>
+  <div class="row"><span class="sw"><span class="dia" style="background:#ff2bd6;border:1px solid #fff;"></span></span> USV Service Port (Iqaluit)</div>
+  <div class="row" style="color:#ff3838;"><span class="sw"><span class="dash" style="color:#ff3838;"></span></span> SATCOM (Primary)</div>
+  <div class="row" style="color:#22e06a;"><span class="sw"><span class="dash" style="color:#22e06a;"></span></span> SATCOM (Alternate)</div>
+  <div class="row"><span class="sw"><span class="cov" style="background:rgba(121,227,214,.35); border:1px solid #79e3d6;"></span></span> USV Coverage Area</div>
+  <div class="row"><span class="sw">⋌</span> UAV LX300 Orbit</div>
+</div>
+
+<div class="status">
+  <div class="item"><span class="lbl">Link Health</span><span class="val"><span class="dot"></span>Nominal</span></div>
+  <div class="item"><span class="lbl">USVs On-Station</span><span class="val">3 / 3</span></div>
+  <div class="item"><span class="lbl">UAV</span><span class="val">AIRBORNE · LX300</span></div>
+  <div class="item"><span class="lbl">Backhaul</span><span class="val">SATCOM-1 · PRI</span></div>
+  <div class="item"><span class="lbl">Theatre</span><span class="val">Davis Strait / Baffin NE</span></div>
+</div>
+
+<div class="tweaks" id="tweaks">
+  <h4>Tweaks</h4>
+  <label>Satellite imagery <input type="checkbox" id="tk_imagery" checked></label>
+  <label>USV coverage <input type="checkbox" id="tk_coverage" checked></label>
+  <label>Sonar pings <input type="checkbox" id="tk_sonar" checked></label>
+  <label>SATCOM links <input type="checkbox" id="tk_satcom" checked></label>
+  <label>UAV orbit <input type="checkbox" id="tk_uav" checked></label>
+  <label>Labels <input type="checkbox" id="tk_labels" checked></label>
+  <label>Night side <input type="checkbox" id="tk_night"></label>
+  <label>Camera HUD <input type="checkbox" id="tk_camhud"></label>
+  <label style="flex-direction:column; align-items:stretch;">
+    <span style="color:var(--dim); font-size:10px; letter-spacing:.2em; text-transform:uppercase; margin-bottom:4px;">Camera</span>
+    <select id="tk_view">
+      <option value="theatre">Theatre (default)</option>
+      <option value="usv">USV Patrol</option>
+      <option value="roc">Halifax ROC</option>
+      <option value="port">Iqaluit Port</option>
+      <option value="sat">SATCOM</option>
+    </select>
+  </label>
+  <button class="btn" id="tk_replay">Replay intro</button>
+</div>
+
+<div class="hint" id="hint">Loading globe…</div>
+
+<script>
+/*EDITMODE-BEGIN*/const TWEAK_DEFAULTS = {
+  "imagery": true,
+  "coverage": true,
+  "sonar": true,
+  "satcom": true,
+  "uav": true,
+  "labels": true,
+  "night": false,
+  "camhud": false
+}/*EDITMODE-END*/;
+
+// Public token (Cesium default ion token — good for basic globe)
+Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI0YzJiYzc2OC0yZDQ4LTRkNzgtODIwMC1kZWIwZDIzNWE2MTAiLCJpZCI6NDEzOTIyLCJpYXQiOjE3NzUzNTc1MzJ9.dfL2TAvx-rWNk_CdEyrQtWiJy09fMENXbs5m_YKuWxs';
+
+// Use Cesium's default imagery (requires token) OR fallback to a public provider.
+const viewer = new Cesium.Viewer('cesium', {
+  baseLayerPicker:false, geocoder:false, homeButton:false, sceneModePicker:false,
+  navigationHelpButton:false, animation:false, timeline:false, fullscreenButton:false,
+  infoBox:false, selectionIndicator:false, creditContainer: document.createElement('div'),
+  shouldAnimateAtStartup:true
+});
+window.viewer = viewer; // debug hook
+// Use Cesium Ion Bing Aerial imagery (token-backed); fall back to ArcGIS if it fails
+try {
+  viewer.imageryLayers.removeAll();
+  viewer.imageryLayers.addImageryProvider(
+    new Cesium.IonImageryProvider({ assetId: 3 })
+  );
+} catch(e){
+  viewer.imageryLayers.addImageryProvider(new Cesium.UrlTemplateImageryProvider({
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    maximumLevel: 13, credit: ''
+  }));
+}
+const scene = viewer.scene;
+scene.globe.enableLighting = false;
+scene.globe.showGroundAtmosphere = true;
+scene.skyAtmosphere.show = true;
+scene.backgroundColor = Cesium.Color.fromCssColorString('#02040a');
+scene.globe.baseColor = Cesium.Color.fromCssColorString('#0a1625');
+viewer.resolutionScale = Math.min(window.devicePixelRatio || 1, 2);
+
+// Remove Cesium credit
+const creditDisplay = viewer._cesiumWidget && viewer._cesiumWidget.creditContainer;
+if (creditDisplay) creditDisplay.style.display='none';
+
+/* -------- Coordinates -------- */
+// Halifax ROC
+const ROC = { lon: -63.58, lat: 44.65, name: 'ROC' };
+// DND MOD Operations Centre – Ottawa
+const MOD = { lon: -75.70, lat: 45.41, name: 'MOD' };
+// Iqaluit service port
+const PORT = { lon: -68.52, lat: 63.75, name: 'PORT' };
+
+// USV patrol line — NE-to-SW diagonal blocking approach from NW Atlantic / Davis Strait
+// toward Newfoundland's NE coast. Line runs from southern Greenland waters down
+// toward NE Newfoundland. Ovals oriented NW-SE (perpendicular to line).
+const USVS = [
+  { lon: -48.5, lat: 60.2, name: 'USV-01', hdg: 225 }, // NE end (near Cape Farewell area)
+  { lon: -52.5, lat: 57.0, name: 'USV-02', hdg: 225 }, // middle
+  { lon: -55.5, lat: 53.5, name: 'USV-03', hdg: 225 }  // SW end (off Labrador, pointing at Newfoundland)
+];
+
+// UAV station — offset from middle USV so it doesn't sit on top of the oval
+const UAV_CENTER = { lon: -51.2, lat: 58.4, alt: 120_000 };
+const UAV_ORBIT_RADIUS_M = 180_000;
+
+// SATCOMs — GEO-ish, positioned so dashed lines look natural
+// Put them high (GEO ~35,786 km is too far for visual; we draw at 2,800 km for readability)
+const SATCOM_ALT = 1_100_000;
+// Position over Newfoundland so birds sit above the backhaul path to Halifax
+const SATCOM1 = { lon: -56.0, lat: 52.5, alt: SATCOM_ALT, name: 'SATCOM-1' };
+const SATCOM2 = { lon: -53.0, lat: 49.5, alt: SATCOM_ALT, name: 'SATCOM-2' };
+
+/* -------- Entities -------- */
+const C = Cesium.Color;
+const col = {
+  roc: C.fromCssColorString('#ffd800'),
+  mod: C.fromCssColorString('#6fd2ff'),
+  port: C.fromCssColorString('#ff2bd6'),
+  primary: C.fromCssColorString('#ff3838'),
+  alt: C.fromCssColorString('#22e06a'),
+  mod_net: C.fromCssColorString('#ff8a3d'),
+  coverage: C.fromCssColorString('#79e3d6'),
+  sonar: C.fromCssColorString('#6cd0ff'),
+  active: C.fromCssColorString('#ff4a4a'),
+  usv: C.fromCssColorString('#e6eef7'),
+  uav: C.fromCssColorString('#ffd24a'),
+  sat: C.fromCssColorString('#ffffff'),
+  ink: C.fromCssColorString('#e6eef7'),
+  black: C.fromCssColorString('#000000').withAlpha(0.75)
+};
+
+function diamondLabel(pos, text, color, offsetY=-22){
+  return viewer.entities.add({
+    position: pos,
+    point: {
+      pixelSize: 14,
+      color: color,
+      outlineColor: C.WHITE,
+      outlineWidth: 1.5,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      heightReference: Cesium.HeightReference.NONE
+    },
+    label: {
+      text: text,
+      font: '600 11px "Inter", Helvetica, Arial, sans-serif',
+      fillColor: color,
+      outlineColor: col.black,
+      outlineWidth: 3,
+      style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+      pixelOffset: new Cesium.Cartesian2(0, offsetY),
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      showBackground: false,
+      verticalOrigin: Cesium.VerticalOrigin.BOTTOM
+    }
+  });
+}
+
+// Diamonds use billboards to get a true rotated square
+function makeDiamondCanvas(hex, size=16){
+  const c = document.createElement('canvas'); c.width=c.height=size*2;
+  const ctx = c.getContext('2d');
+  ctx.translate(size, size);
+  ctx.rotate(Math.PI/4);
+  ctx.fillStyle = hex;
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 2;
+  const s = size*0.95;
+  ctx.fillRect(-s/2, -s/2, s, s);
+  ctx.strokeRect(-s/2, -s/2, s, s);
+  return c;
+}
+function sitePin(lon, lat, hex, label, offX=0, offY=-16){
+  const pos = Cesium.Cartesian3.fromDegrees(lon, lat);
+  return viewer.entities.add({
+    position: pos,
+    billboard: {
+      image: makeDiamondCanvas(hex, 12),
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      scale: 1.0
+    },
+    label: {
+      text: label,
+      font: '700 11px "Inter", Helvetica, Arial, sans-serif',
+      fillColor: C.fromCssColorString(hex),
+      outlineColor: col.black,
+      outlineWidth: 3,
+      style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+      pixelOffset: new Cesium.Cartesian2(offX, offY),
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+      verticalOrigin: Cesium.VerticalOrigin.TOP
+    }
+  });
+}
+
+/* -------- Build scene -------- */
+
+// Sites
+const rocEnt  = sitePin(ROC.lon, ROC.lat, '#ffd800', 'ROC · Halifax', 0, 12);
+const portEnt = sitePin(PORT.lon, PORT.lat, '#ff2bd6', 'PORT · Iqaluit', 0, 12);
+
+// USV ship glyph
+function makeShipCanvas(){
+  const w=60,h=22;
+  const c=document.createElement('canvas'); c.width=w;c.height=h;
+  const ctx=c.getContext('2d');
+  // hull
+  ctx.fillStyle='#e6eef7'; ctx.strokeStyle='#07101c'; ctx.lineWidth=1.5;
+  ctx.beginPath();
+  ctx.moveTo(4,12); ctx.lineTo(w-10,12); ctx.lineTo(w-4,17); ctx.lineTo(4,17); ctx.closePath();
+  ctx.fill(); ctx.stroke();
+  // superstructure
+  ctx.fillStyle='#8aa6c4';
+  ctx.fillRect(18,6,16,6);
+  ctx.strokeRect(18,6,16,6);
+  // mast
+  ctx.beginPath(); ctx.moveTo(26,6); ctx.lineTo(26,1); ctx.stroke();
+  return c;
+}
+const shipImg = makeShipCanvas();
+
+// 3D model URLs — Cesium public sample GLBs (raw.githubusercontent CDN, verified)
+const USV_MODEL_URL = 'https://raw.githubusercontent.com/CesiumGS/cesium/main/Apps/SampleData/models/CesiumMilkTruck/CesiumMilkTruck.glb';
+const UAV_MODEL_URL = 'https://raw.githubusercontent.com/CesiumGS/cesium/main/Apps/SampleData/models/CesiumAir/Cesium_Air.glb';
+
+// Convert bearing (0=N, 90=E) to Cesium HPR heading (radians, clockwise from N)
+function bearingToHeading(bearingDeg){ return Cesium.Math.toRadians(bearingDeg); }
+
+const usvEnts = USVS.map((u,i)=>{
+  const pos = Cesium.Cartesian3.fromDegrees(u.lon, u.lat, 0);
+  // Simple 3D sphere marker on the sea surface (no GLB)
+  const e = viewer.entities.add({
+    id: 'usv-'+i,
+    position: Cesium.Cartesian3.fromDegrees(u.lon, u.lat, 15_000),
+    ellipsoid: {
+      radii: new Cesium.Cartesian3(22_000, 22_000, 22_000),
+      material: Cesium.Color.fromCssColorString('#e6eef7'),
+      outline: true,
+      outlineColor: Cesium.Color.fromCssColorString('#79e3d6')
+    },
+    label: {
+      text: u.name,
+      font: '700 12px "JetBrains Mono", ui-monospace, monospace',
+      fillColor: col.ink,
+      outlineColor: col.black,
+      outlineWidth: 3,
+      style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+      pixelOffset: new Cesium.Cartesian2(0, -46),
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      verticalOrigin: Cesium.VerticalOrigin.BOTTOM
+    }
+  });
+
+  // Outer glow halo
+  viewer.entities.add({
+    position: Cesium.Cartesian3.fromDegrees(u.lon, u.lat, 15_000),
+    ellipsoid: {
+      radii: new Cesium.Cartesian3(34_000, 34_000, 34_000),
+      material: Cesium.Color.fromCssColorString('#79e3d6').withAlpha(0.28)
+    }
+  });
+  return e;
+});
+
+// USV coverage ellipses (teal fill) — span the strait gap E–W
+const coverageEnts = USVS.map((u)=>{
+  return viewer.entities.add({
+    position: Cesium.Cartesian3.fromDegrees(u.lon, u.lat, 0),
+    ellipse: {
+      semiMajorAxis: 420_000,
+      semiMinorAxis: 160_000,
+      // Long axis along the patrol line (NE-SW, ~45° from N)
+      rotation: Cesium.Math.toRadians(45),
+      material: col.coverage.withAlpha(0.28),
+      outline: true,
+      outlineColor: col.coverage.withAlpha(0.9),
+      outlineWidth: 2,
+      height: 0
+    }
+  });
+});
+
+// UAV coverage circle — yellow ring on the surface below the UAV
+const uavCoverage = viewer.entities.add({
+  position: Cesium.Cartesian3.fromDegrees(UAV_CENTER.lon, UAV_CENTER.lat, 0),
+  ellipse: {
+    semiMajorAxis: 260_000,
+    semiMinorAxis: 260_000,
+    material: C.fromCssColorString('#ffd24a').withAlpha(0.12),
+    outline: true,
+    outlineColor: C.fromCssColorString('#ffd24a').withAlpha(0.85),
+    outlineWidth: 2,
+    height: 0
+  }
+});
+
+// Sonar ping circles — animated by CallbackProperty
+const pingStart = Cesium.JulianDate.now();
+function animatedRadius(basePeriod, maxR){
+  return new Cesium.CallbackProperty((time)=>{
+    const t = Cesium.JulianDate.secondsDifference(time, pingStart);
+    const phase = (t % basePeriod) / basePeriod; // 0..1
+    return 10_000 + phase * maxR;
+  }, false);
+}
+function animatedAlpha(basePeriod, baseColor){
+  return new Cesium.CallbackProperty((time)=>{
+    const t = Cesium.JulianDate.secondsDifference(time, pingStart);
+    const phase = (t % basePeriod) / basePeriod;
+    const a = (1 - phase) * 0.8;
+    return baseColor.withAlpha(a);
+  }, false);
+}
+const sonarEnts = [];
+USVS.forEach((u, idx)=>{
+  // passive sonar (cyan) - 2 rings staggered
+  for (let k=0;k<2;k++){
+    const period = 4;
+    const maxR = 90_000;
+    const startOffset = k * period/2;
+    sonarEnts.push(viewer.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(u.lon, u.lat, 0),
+      ellipse: {
+        semiMajorAxis: new Cesium.CallbackProperty((time)=>{
+          const t = Cesium.JulianDate.secondsDifference(time, pingStart) + startOffset;
+          return 10_000 + ((t % period)/period) * maxR;
+        }, false),
+        semiMinorAxis: new Cesium.CallbackProperty((time)=>{
+          const t = Cesium.JulianDate.secondsDifference(time, pingStart) + startOffset;
+          return 10_000 + ((t % period)/period) * maxR;
+        }, false),
+        material: new Cesium.ColorMaterialProperty(new Cesium.CallbackProperty((time)=>{
+          const t = Cesium.JulianDate.secondsDifference(time, pingStart) + startOffset;
+          const a = (1 - ((t % period)/period)) * 0.0; // transparent fill
+          return col.sonar.withAlpha(a);
+        }, false)),
+        outline: true,
+        outlineColor: new Cesium.CallbackProperty((time)=>{
+          const t = Cesium.JulianDate.secondsDifference(time, pingStart) + startOffset;
+          const a = (1 - ((t % period)/period)) * 0.85;
+          return col.sonar.withAlpha(a);
+        }, false),
+        outlineWidth: 2,
+        height: 0
+      }
+    }));
+  }
+});
+
+// Active ping from middle USV — red, larger
+const midU = USVS[1];
+for (let k=0;k<1;k++){
+  const period = 6;
+  const maxR = 150_000;
+  sonarEnts.push(viewer.entities.add({
+    position: Cesium.Cartesian3.fromDegrees(midU.lon+0.8, midU.lat+0.3, 0),
+    ellipse: {
+      semiMajorAxis: new Cesium.CallbackProperty((time)=>{
+        const t = Cesium.JulianDate.secondsDifference(time, pingStart);
+        return 15_000 + ((t % period)/period) * maxR;
+      }, false),
+      semiMinorAxis: new Cesium.CallbackProperty((time)=>{
+        const t = Cesium.JulianDate.secondsDifference(time, pingStart);
+        return 15_000 + ((t % period)/period) * maxR;
+      }, false),
+      material: col.active.withAlpha(0),
+      outline: true,
+      outlineColor: new Cesium.CallbackProperty((time)=>{
+        const t = Cesium.JulianDate.secondsDifference(time, pingStart);
+        const a = (1 - ((t % period)/period)) * 0.9;
+        return col.active.withAlpha(a);
+      }, false),
+      outlineWidth: 2,
+      height: 0
+    }
+  }));
+}
+
+/* -------- SATCOM satellites -------- */
+function satPin(lon, lat, alt, hex, label){
+  const pos = Cesium.Cartesian3.fromDegrees(lon, lat, alt);
+  return viewer.entities.add({
+    position: pos,
+    billboard: {
+      image: makeSatCanvas(hex),
+      scale: 1.0,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY
+    },
+    label: {
+      text: label,
+      font: '700 11px "Inter", Helvetica, Arial, sans-serif',
+      fillColor: C.fromCssColorString(hex),
+      outlineColor: col.black,
+      outlineWidth: 3,
+      style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+      pixelOffset: new Cesium.Cartesian2(0, -22),
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      verticalOrigin: Cesium.VerticalOrigin.BOTTOM
+    }
+  });
+}
+function makeSatCanvas(hex){
+  const s=40;
+  const c=document.createElement('canvas'); c.width=c.height=s;
+  const ctx=c.getContext('2d');
+  ctx.translate(s/2, s/2);
+  // body
+  ctx.fillStyle='#f2f4f8'; ctx.strokeStyle='#111'; ctx.lineWidth=1;
+  ctx.fillRect(-4,-5,8,10); ctx.strokeRect(-4,-5,8,10);
+  // panels
+  ctx.fillStyle='#1f3a66'; ctx.strokeStyle=hex; ctx.lineWidth=1.5;
+  ctx.fillRect(-16,-3,11,6); ctx.strokeRect(-16,-3,11,6);
+  ctx.fillRect(5,-3,11,6); ctx.strokeRect(5,-3,11,6);
+  // antenna
+  ctx.strokeStyle='#ffffff'; ctx.beginPath(); ctx.moveTo(0,-5); ctx.lineTo(0,-10); ctx.stroke();
+  ctx.fillStyle=hex; ctx.beginPath(); ctx.arc(0,-12,2.5,0,Math.PI*2); ctx.fill();
+  return c;
+}
+const sat1 = satPin(SATCOM1.lon, SATCOM1.lat, SATCOM1.alt, '#ff3838', 'SATCOM-1');
+const sat2 = satPin(SATCOM2.lon, SATCOM2.lat, SATCOM2.alt, '#22e06a', 'SATCOM-2');
+
+/* -------- UAV -------- */
+// LX300-style tactical UAV — twin-boom, pusher prop, high-aspect wings.
+// Generic top-down silhouette (illustrative, not a licensed model).
+function makeUavCanvas(){
+  const w=120, h=110;
+  const c=document.createElement('canvas'); c.width=w; c.height=h;
+  const ctx=c.getContext('2d');
+  ctx.translate(w/2, h/2);
+  ctx.lineJoin='round';
+
+  const body='#f2f4f8', stroke='#0b1422', accent='#ffd24a';
+  ctx.strokeStyle=stroke; ctx.lineWidth=1.6;
+
+  // Rotor disc (coaxial — two overlapping discs, semi-transparent)
+  ctx.save();
+  ctx.globalAlpha = 0.22;
+  ctx.fillStyle = accent;
+  ctx.strokeStyle = accent;
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(0,0,48,0,Math.PI*2); ctx.fill();
+  ctx.globalAlpha = 0.35;
+  ctx.beginPath(); ctx.arc(0,0,48,0,Math.PI*2); ctx.stroke();
+  ctx.restore();
+
+  // Rotor blur lines (two offset pairs to suggest coaxial counter-rotation)
+  ctx.save();
+  ctx.globalAlpha = 0.55;
+  ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.moveTo(-46, -2); ctx.lineTo(46, -2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-46,  2); ctx.lineTo(46,  2); ctx.stroke();
+  ctx.rotate(Math.PI/3);
+  ctx.beginPath(); ctx.moveTo(-46, -2); ctx.lineTo(46, -2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-46,  2); ctx.lineTo(46,  2); ctx.stroke();
+  ctx.restore();
+
+  // Rotor hub (stacked — two small circles to hint coaxial head)
+  ctx.strokeStyle = stroke; ctx.lineWidth = 1.4;
+  ctx.fillStyle = '#2a3648';
+  ctx.beginPath(); ctx.arc(0,0,6,0,Math.PI*2); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = accent;
+  ctx.beginPath(); ctx.arc(0,0,3,0,Math.PI*2); ctx.fill(); ctx.stroke();
+
+  // Fuselage — helicopter body pointing "up" (nose), with tail boom extending "down"
+  ctx.fillStyle = body; ctx.strokeStyle = stroke; ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(-6, -4);
+  ctx.quadraticCurveTo(-8, -16, 0, -20);   // rounded nose
+  ctx.quadraticCurveTo(8, -16, 6, -4);
+  ctx.lineTo(4, 12);                        // shoulders to tail
+  ctx.lineTo(-4, 12);
+  ctx.closePath();
+  ctx.fill(); ctx.stroke();
+
+  // Cockpit window hint
+  ctx.fillStyle = '#5b7aa0';
+  ctx.beginPath();
+  ctx.ellipse(0, -12, 3.5, 5, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // Tail boom (no tail rotor needed — coaxial)
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.moveTo(-2.5, 12); ctx.lineTo(2.5, 12);
+  ctx.lineTo(2, 32); ctx.lineTo(-2, 32);
+  ctx.closePath();
+  ctx.fill(); ctx.stroke();
+
+  // Vertical tail fin
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.moveTo(-2, 28); ctx.lineTo(2, 28);
+  ctx.lineTo(6, 36); ctx.lineTo(-2, 36);
+  ctx.closePath();
+  ctx.fill(); ctx.stroke();
+
+  // Skid landing gear (two short rails visible from top)
+  ctx.strokeStyle = stroke; ctx.lineWidth = 1.3;
+  ctx.beginPath(); ctx.moveTo(-8, -2); ctx.lineTo(-8, 10); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo( 8, -2); ctx.lineTo( 8, 10); ctx.stroke();
+
+  return c;
+}
+const uavImg = makeUavCanvas();
+// Static UAV position (no animation)
+const uavStaticPos = Cesium.Cartesian3.fromDegrees(UAV_CENTER.lon, UAV_CENTER.lat, UAV_CENTER.alt);
+const uavPosProp = new Cesium.ConstantPositionProperty(uavStaticPos);
+
+const uavEnt = viewer.entities.add({
+  position: uavPosProp,
+  ellipsoid: {
+    radii: new Cesium.Cartesian3(22_000, 22_000, 22_000),
+    material: Cesium.Color.fromCssColorString('#ffd24a'),
+    outline: true,
+    outlineColor: Cesium.Color.WHITE
+  },
+  label: {
+    text: 'UAV-01 · LX300',
+    font: '700 11px "JetBrains Mono", ui-monospace, monospace',
+    fillColor: C.fromCssColorString('#ffd24a'),
+    outlineColor: col.black,
+    outlineWidth: 3,
+    style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+    pixelOffset: new Cesium.Cartesian2(0, -60),
+    disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    verticalOrigin: Cesium.VerticalOrigin.BOTTOM
+  }
+});
+
+// Altitude drop-line (thin tether from UAV down to surface for readability)
+const uavGroundShadow = Cesium.Cartesian3.fromDegrees(UAV_CENTER.lon, UAV_CENTER.lat, 0);
+const uavDropLine = viewer.entities.add({
+  polyline: {
+    positions: [uavStaticPos, uavGroundShadow],
+    width: 1.2,
+    arcType: Cesium.ArcType.NONE,
+    material: new Cesium.PolylineDashMaterialProperty({
+      color: C.fromCssColorString('#ffd24a').withAlpha(0.55),
+      dashLength: 8
+    })
+  }
+});
+
+// UAV beacon glow removed — was causing z-fighting artifacts with the UAV sphere.
+
+// UAV orbit circle removed — UAV is now a fixed station.
+
+/* -------- Links -------- */
+function dashedLink(posA, posB, hex, width=2, dashLen=18){
+  return viewer.entities.add({
+    polyline: {
+      positions: new Cesium.CallbackProperty(()=>[posA(), posB()], false),
+      width: width,
+      arcType: Cesium.ArcType.NONE, // straight through space for SATCOM
+      material: new Cesium.PolylineDashMaterialProperty({
+        color: C.fromCssColorString(hex),
+        dashLength: dashLen
+      })
+    }
+  });
+}
+function solidLink(posA, posB, hex, width=2, arc=true){
+  return viewer.entities.add({
+    polyline: {
+      positions: new Cesium.CallbackProperty(()=>[posA(), posB()], false),
+      width: width,
+      arcType: arc ? Cesium.ArcType.GEODESIC : Cesium.ArcType.NONE,
+      material: new Cesium.PolylineArrowMaterialProperty(C.fromCssColorString(hex))
+    }
+  });
+}
+
+const pROC  = ()=> Cesium.Cartesian3.fromDegrees(ROC.lon, ROC.lat, 0);
+const pMOD  = ()=> Cesium.Cartesian3.fromDegrees(MOD.lon, MOD.lat, 0);
+const pPORT = ()=> Cesium.Cartesian3.fromDegrees(PORT.lon, PORT.lat, 0);
+const pSAT1 = ()=> Cesium.Cartesian3.fromDegrees(SATCOM1.lon, SATCOM1.lat, SATCOM1.alt);
+const pSAT2 = ()=> Cesium.Cartesian3.fromDegrees(SATCOM2.lon, SATCOM2.lat, SATCOM2.alt);
+const pUSV  = (i)=> ()=> Cesium.Cartesian3.fromDegrees(USVS[i].lon, USVS[i].lat, 0);
+const pUAV  = ()=> uavPosProp.getValue(viewer.clock.currentTime);
+
+const satcomEnts = [];
+
+// Primary (red) SATCOM-1 between ROC and each USV + UAV
+USVS.forEach((u,i)=>{
+  satcomEnts.push(dashedLink(pSAT1, pUSV(i), '#ff3838', 2, 16));
+});
+satcomEnts.push(dashedLink(pSAT1, pUAV, '#ff3838', 2, 16));
+satcomEnts.push(dashedLink(pSAT1, pROC, '#ff3838', 2, 16));
+
+// Alternate (green) SATCOM-2
+USVS.forEach((u,i)=>{
+  satcomEnts.push(dashedLink(pSAT2, pUSV(i), '#22e06a', 1.5, 14));
+});
+satcomEnts.push(dashedLink(pSAT2, pUAV, '#22e06a', 1.5, 14));
+satcomEnts.push(dashedLink(pSAT2, pROC, '#22e06a', 1.5, 14));
+
+// Port ↔ ROC operational tether (thin cyan)
+const portTether = viewer.entities.add({
+  polyline: {
+    positions: new Cesium.CallbackProperty(()=>[pPORT(), pROC()], false),
+    width: 1.2,
+    arcType: Cesium.ArcType.GEODESIC,
+    material: new Cesium.PolylineDashMaterialProperty({
+      color: C.fromCssColorString('#6fd2ff').withAlpha(0.55),
+      dashLength: 8
+    })
+  }
+});
+
+// Port deployment traces to each USV (very faint cyan curves)
+const portTraces = USVS.map((u,i)=> viewer.entities.add({
+  polyline: {
+    positions: [pPORT(), Cesium.Cartesian3.fromDegrees(u.lon, u.lat, 0)],
+    width: 1,
+    arcType: Cesium.ArcType.GEODESIC,
+    material: C.fromCssColorString('#6fd2ff').withAlpha(0.35)
+  }
+}));
+
+/* -------- Camera -------- */
+function flyTheatre(duration=2.8){
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(-29.61, 48.76, 1_873_000),
+    orientation: { heading: Cesium.Math.toRadians(304), pitch: Cesium.Math.toRadians(-42), roll: 0 },
+    duration
+  });
+}
+function flyUSV(){
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(-59, 68, 1_400_000),
+    orientation: { heading: Cesium.Math.toRadians(10), pitch: Cesium.Math.toRadians(-45), roll: 0 },
+    duration: 2.0
+  });
+}
+function flyROC(){
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(-63.58, 42, 900_000),
+    orientation: { heading: 0, pitch: Cesium.Math.toRadians(-50), roll: 0 },
+    duration: 2.0
+  });
+}
+function flyPort(){
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(-68.5, 61, 1_100_000),
+    orientation: { heading: 0, pitch: Cesium.Math.toRadians(-45), roll: 0 },
+    duration: 2.0
+  });
+}
+function flySAT(){
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(-50, 35, 9_000_000),
+    orientation: { heading: 0, pitch: Cesium.Math.toRadians(-55), roll: 0 },
+    duration: 2.0
+  });
+}
+
+/* -------- Tweaks wiring -------- */
+const T = {
+  imagery: document.getElementById('tk_imagery'),
+  coverage: document.getElementById('tk_coverage'),
+  sonar: document.getElementById('tk_sonar'),
+  satcom: document.getElementById('tk_satcom'),
+  uav: document.getElementById('tk_uav'),
+  labels: document.getElementById('tk_labels'),
+  night: document.getElementById('tk_night'),
+  camhud: document.getElementById('tk_camhud'),
+  view: document.getElementById('tk_view'),
+  replay: document.getElementById('tk_replay')
+};
+
+// apply defaults
+Object.entries(TWEAK_DEFAULTS).forEach(([k,v])=>{ if (T[k]) T[k].checked = v; });
+
+function applyTweaks(){
+  coverageEnts.forEach(e=> e.show = T.coverage.checked);
+  sonarEnts.forEach(e=> e.show = T.sonar.checked);
+  satcomEnts.forEach(e=> e.show = T.satcom.checked);
+  uavEnt.show = T.uav.checked;
+
+  // labels
+  const labelShow = T.labels.checked;
+  [rocEnt, portEnt, sat1, sat2, uavEnt, ...usvEnts].forEach(e=>{
+    if (e.label) e.label.show = labelShow;
+  });
+
+  // night
+  scene.globe.enableLighting = T.night.checked;
+
+  // camera HUD toggle
+  document.getElementById('camdebug').style.display = T.camhud.checked ? 'flex' : 'none';
+
+  // imagery toggle: swap to a neutral base when off
+  // (simple: fade globe color)
+  scene.globe.baseColor = T.night.checked ? C.fromCssColorString('#030711') : C.fromCssColorString('#0a1625');
+}
+Object.values(T).forEach(el=>{
+  if (el && el.tagName === 'INPUT' && el.type==='checkbox') el.addEventListener('change', ()=>{
+    applyTweaks();
+    persist();
+  });
+});
+T.view.addEventListener('change', ()=>{
+  const v = T.view.value;
+  if (v==='theatre') flyTheatre(1.8);
+  else if (v==='usv') flyUSV();
+  else if (v==='roc') flyROC();
+  else if (v==='port') flyPort();
+  else if (v==='sat') flySAT();
+});
+T.replay.addEventListener('click', ()=>{
+  // from far out, fly in
+  viewer.camera.setView({
+    destination: Cesium.Cartesian3.fromDegrees(-55, 30, 22_000_000),
+    orientation: { heading: 0, pitch: Cesium.Math.toRadians(-70), roll: 0 }
+  });
+  setTimeout(()=>flyTheatre(3.2), 150);
+  T.view.value = 'theatre';
+});
+
+function persist(){
+  const edits = {};
+  Object.keys(TWEAK_DEFAULTS).forEach(k=>{
+    if (T[k]) edits[k] = T[k].checked;
+  });
+  try { window.parent.postMessage({type:'__edit_mode_set_keys', edits}, '*'); } catch(e){}
+}
+
+/* -------- Edit mode -------- */
+window.addEventListener('message', (ev)=>{
+  const msg = ev.data || {};
+  if (msg.type === '__activate_edit_mode') document.getElementById('tweaks').classList.add('on');
+  else if (msg.type === '__deactivate_edit_mode') document.getElementById('tweaks').classList.remove('on');
+});
+try { window.parent.postMessage({type:'__edit_mode_available'}, '*'); } catch(e){}
+
+/* -------- Boot -------- */
+document.getElementById('hint').style.display='none';
+applyTweaks();
+// start far out then zoom in
+viewer.camera.setView({
+  destination: Cesium.Cartesian3.fromDegrees(-55, 30, 22_000_000),
+  orientation: { heading: 0, pitch: Cesium.Math.toRadians(-70), roll: 0 }
+});
+setTimeout(()=>flyTheatre(3.2), 300);
+
+// keep clock running for callback animations
+viewer.clock.shouldAnimate = true;
+
+/* -------- Camera debug HUD -------- */
+(function(){
+  const $ = id => document.getElementById(id);
+  function update(){
+    const cam = viewer.camera;
+    const carto = Cesium.Cartographic.fromCartesian(cam.positionWC);
+    const lon = Cesium.Math.toDegrees(carto.longitude);
+    const lat = Cesium.Math.toDegrees(carto.latitude);
+    const alt = carto.height;
+    const hdg = (Cesium.Math.toDegrees(cam.heading) + 360) % 360;
+    const pit = Cesium.Math.toDegrees(cam.pitch);
+    $('cd-lon').textContent = lon.toFixed(2);
+    $('cd-lat').textContent = lat.toFixed(2);
+    $('cd-alt').textContent = (alt/1000).toFixed(0)+' km';
+    $('cd-hdg').textContent = hdg.toFixed(0)+'°';
+    $('cd-pit').textContent = pit.toFixed(0)+'°';
+    $('cd-copy').dataset.snippet =
+      `destination: Cesium.Cartesian3.fromDegrees(${lon.toFixed(2)}, ${lat.toFixed(2)}, ${Math.round(alt)}),\n` +
+      `orientation: { heading: Cesium.Math.toRadians(${hdg.toFixed(1)}), pitch: Cesium.Math.toRadians(${pit.toFixed(1)}), roll: 0 }`;
+  }
+  viewer.camera.changed.addEventListener(update);
+  viewer.scene.postRender.addEventListener(update); // also update during fly
+  update();
+  $('cd-copy').addEventListener('click', ()=>{
+    const txt = $('cd-copy').dataset.snippet || '';
+    navigator.clipboard.writeText(txt).then(()=>{
+      const b = $('cd-copy'); const t = b.textContent; b.textContent = '✓'; setTimeout(()=>b.textContent = t, 900);
+    });
+  });
+})();
+</script>
+</body>
+</html>
