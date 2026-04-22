@@ -105,18 +105,31 @@ export function mount(root) {
   root.appendChild(controls);
 
   const t0Holder = { value: performance.now() / 1000 };
+  let running = false;       // animation is off until the reader clicks "run"
+  let animHandle = null;
   buildAll();
 
+  // Run / stop controls the animation itself. Clicking "run" reseeds
+  // the noise, resets the phase to t=0, and starts the rAF loop;
+  // clicking "stop" cancels the loop (the last rendered frame stays
+  // on screen). Doubles as the "replay" button the previous version
+  // had.
   makeToggle(controls, {
-    labelOff: "replay", labelOn: "replay",
+    labelOff: "run", labelOn: "stop",
+    value: false,
     onToggle: (on) => {
       if (on) {
         buildAll();
         t0Holder.value = performance.now() / 1000;
-        setTimeout(() => {
-          const btn = controls.querySelector(".scene-button");
-          if (btn) btn.classList.remove("is-on");
-        }, 120);
+        lastPingHeard = -1;
+        running = true;
+        animHandle = requestAnimationFrame(frame);
+      } else {
+        running = false;
+        if (animHandle !== null) {
+          cancelAnimationFrame(animHandle);
+          animHandle = null;
+        }
       }
     },
   });
@@ -133,12 +146,9 @@ export function mount(root) {
 
   const CYCLE_PING_S = 0.6;     // wall time per "ping" in the animation
   const CYCLE_TOTAL_S = CYCLE_PING_S * N_PULSES + 1;
-  let lastPingHeard = -1;
+  var lastPingHeard = -1;       // hoisted so the run-toggle can reset it
 
-  function frame(now) {
-    const t = (now / 1000) - t0Holder.value;
-    const phase = t % CYCLE_TOTAL_S;
-
+  function render(phase) {
     ctx.clearRect(0, 0, W, H);
     drawWorld(phase);
     drawReceiveTrace(phase);
@@ -146,8 +156,26 @@ export function mount(root) {
     drawSlowTimeStack(phase);
     drawIntegrated(phase);
     drawCFAR(phase);
+    if (!running) drawIdleHint();
+  }
 
-    // play one ping per simulated pulse
+  function drawIdleHint() {
+    ctx.save();
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    ctx.font = 'italic 12px Charter, "Iowan Old Style", Georgia, serif';
+    const msg = "press  run  to cycle the pipeline";
+    const tw = ctx.measureText(msg).width;
+    ctx.fillText(msg, W - tw - PAD - 6, 14);
+    ctx.restore();
+  }
+
+  function frame(now) {
+    if (!running) { animHandle = null; return; }
+    const t = (now / 1000) - t0Holder.value;
+    const phase = t % CYCLE_TOTAL_S;
+    render(phase);
+
+    // play one ping per simulated pulse, only if the audio toggle is on
     if (cached.soundOn) {
       const pulseIdx = Math.floor(phase / CYCLE_PING_S);
       if (pulseIdx >= 0 && pulseIdx < N_PULSES && pulseIdx !== lastPingHeard) {
@@ -157,8 +185,13 @@ export function mount(root) {
       if (phase > N_PULSES * CYCLE_PING_S + 0.5) lastPingHeard = -1;
     }
 
-    requestAnimationFrame(frame);
+    animHandle = requestAnimationFrame(frame);
   }
+
+  // Initial static frame at phase = 0 so the canvas shows something
+  // (the first outbound pulse, empty downstream panels) before the
+  // reader clicks Run.
+  render(0);
 
   function rangeToX(R) { return PAD + (R / range_max_m) * (W - 2 * PAD); }
 
