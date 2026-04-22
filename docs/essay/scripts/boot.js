@@ -8,6 +8,10 @@ import * as fig03 from "./figures/03-ping.js";
 import * as fig04 from "./figures/04-echo.js";
 import * as fig05 from "./figures/05-time-of-flight.js";
 import * as fig06 from "./figures/06-spreading.js";
+import * as fig07 from "./figures/07-resolution-problem.js";
+import * as fig08 from "./figures/08-bandwidth.js";
+import * as fig09 from "./figures/09-chirp.js";
+import * as fig10 from "./figures/10-spectrogram.js";
 
 const registry = {
   "pressure-wave": fig01,
@@ -16,6 +20,10 @@ const registry = {
   "echo": fig04,
   "time-of-flight": fig05,
   "spreading": fig06,
+  "resolution-problem": fig07,
+  "bandwidth": fig08,
+  "chirp": fig09,
+  "spectrogram": fig10,
 };
 
 function bootFigures() {

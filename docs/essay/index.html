@@ -256,6 +256,135 @@
       </p>
     </section>
 
+    <section>
+      <h2>The resolution problem</h2>
+
+      <p>
+        Suppose two targets sit close together — say a couple of dozen metres apart.
+        Each one returns its own echo. The transducer doesn't know there are two of
+        them; it just sees the sum of two pulses arriving back-to-back. If the pulse
+        is short, the two echoes arrive cleanly separated in time and you can count
+        them. If the pulse is long, they overlap, and what you see is one fat blob.
+      </p>
+
+      <figure class="scene" data-figure="resolution-problem">
+        <figcaption>
+          Sum of two echoes from two equal-strength targets. Sliding the
+          <em>separation</em> closer together or the <em>pulse duration</em> longer
+          merges them into a single peak. The rule of thumb: you can resolve two
+          echoes only when their round-trip-time difference exceeds the pulse
+          duration. Translated to range, that's <i>Δr</i> = <i>c</i>·τ/2.
+        </figcaption>
+      </figure>
+
+      <p>
+        So the obvious move is to use a very short pulse. Make τ tiny and you can
+        resolve targets that are inches apart. But there's the catch we already met
+        in §3: a pulse that is short in time is wide in frequency, and short in time
+        also means it carries very little energy. We can't actually transmit a delta
+        function and hope to hear its echo; the receiver would just see noise. What
+        we actually want is a pulse that is <em>simultaneously</em> long in duration
+        (so it carries energy) and broad in bandwidth (so it resolves close
+        targets). That sounds like a contradiction. It isn't, quite, and the next
+        section explains the way out.
+      </p>
+    </section>
+
+    <section>
+      <h2>Bandwidth IS resolution</h2>
+
+      <p>
+        Here is the cleaner way to state the resolution rule. After we've done the
+        right processing on the receive side (the matched filter, which we'll meet
+        in §11), the achievable range resolution is set entirely by the pulse's
+        <em>bandwidth</em> <i>B</i>:
+      </p>
+
+      <p style="text-align: center; margin: 1.2rem 0; font-size: 1.15rem;">
+        <i>Δr</i>&nbsp;=&nbsp;<i>c</i>&nbsp;/&nbsp;(2<i>B</i>).
+      </p>
+
+      <p>
+        That's it. Whatever shape the pulse has, however long or short it is, what
+        matters at the end is how much frequency it spans. A pulse with 1 kHz of
+        bandwidth gives 75 cm of resolution in water; 10 kHz gives 7.5 cm; 100 Hz
+        gives 7.5 m. The same figure as before, but now the slider is bandwidth and
+        the bracket on the plot shows you <i>Δr</i> directly.
+      </p>
+
+      <figure class="scene" data-figure="bandwidth">
+        <figcaption>
+          Two close targets after matched filtering with a pulse of bandwidth <i>B</i>.
+          The blue trace is the resulting magnitude — each target compressed to a
+          sinc-shaped main lobe of width <i>Δr</i> = <i>c</i>/(2<i>B</i>). When the
+          target separation drops below <i>Δr</i> the peaks merge.
+        </figcaption>
+      </figure>
+
+      <p>
+        So we want bandwidth. Lots of it. And we still want enough total energy to
+        survive the trip out to the target and back. The trick is the chirp.
+      </p>
+    </section>
+
+    <section>
+      <h2>The chirp trick</h2>
+
+      <p>
+        Instead of holding a single tone for τ seconds, sweep the frequency
+        smoothly from <i>f</i><sub>0</sub> to <i>f</i><sub>0</sub>+<i>B</i> over
+        the same τ. The resulting waveform is called a <em>linear-FM chirp</em>,
+        or LFM. It looks like a long, smooth squeak that rises (or falls) in pitch.
+        Birds use them. Bats use them. Submarines use them.
+      </p>
+
+      <figure class="scene" data-figure="chirp">
+        <figcaption>
+          Top: a real LFM chirp in time. Bottom: its magnitude spectrum, occupying
+          the full band <i>f</i><sub>0</sub> to <i>f</i><sub>0</sub>+<i>B</i>.
+          The interesting number is the <em>time-bandwidth product</em> <i>B</i>·τ.
+          A 1 ms tone has <i>B</i>·τ ≈ 1; a 30 ms chirp covering 1 kHz has
+          <i>B</i>·τ = 30. Press <em>play chirp</em> for the audio version.
+        </figcaption>
+      </figure>
+
+      <p>
+        The chirp gives us both: <i>τ</i> can be long (carrying lots of energy)
+        <em>and</em> <i>B</i> can be large (giving fine range resolution after
+        processing). The processing that turns the long, slow squeak into a sharp
+        peak is the matched filter, which gets its own section in a moment. First,
+        a way of seeing what's actually happening to the chirp's frequency over
+        time.
+      </p>
+    </section>
+
+    <section>
+      <h2>A spectrogram of the chirp</h2>
+
+      <p>
+        A spectrogram is a way of plotting a signal as a heatmap with time across
+        and frequency up. It's just a stack of short-time spectra computed every
+        few milliseconds, glued together; the colour of each pixel is "how much
+        energy is at this frequency at this time". For a tone, the spectrogram is
+        a horizontal stripe. For a chirp, it's a tilted line — the slope of the
+        line is exactly <i>B</i>/τ.
+      </p>
+
+      <figure class="scene" data-figure="spectrogram">
+        <figcaption>
+          The chirp on a time–frequency plane. Drag <em>bandwidth</em>; the
+          diagonal tilts. Time-bandwidth product is the area of the rectangle the
+          chirp's diagonal cuts diagonally across — which is also, not by
+          coincidence, the matched-filter processing gain we're about to extract.
+        </figcaption>
+      </figure>
+
+      <p>
+        We have spent five sections on what to <em>send</em>. The remainder of the
+        essay is about what to do with what comes <em>back</em>.
+      </p>
+    </section>
+
     <footer class="essay-foot">
       <p>
         This essay is being written one block of figures at a time. The sections
