@@ -744,16 +744,69 @@
       </p>
     </section>
 
+    <section>
+      <h2>Putting it together</h2>
+
+      <p>
+        That is the entire pipeline. Watch it run.
+      </p>
+
+      <figure class="scene" data-figure="finale">
+        <figcaption>
+          Six panels. Top: a transducer firing pings at a target. Then the raw
+          receive trace, a single-pulse matched-filter output, the slow-time
+          stack, the integrated MF (peak rising as pulses accumulate), and
+          finally the CFAR step that says <em>DETECTED</em>. Audio plays one
+          tick per ping; mute it from the controls. Press <em>replay</em> to
+          re-roll the noise and watch the cycle again.
+        </figcaption>
+      </figure>
+
+      <p>
+        Every working active sonar in the world is some elaborated version of
+        what just played. The chirp is fancier (it might be hyperbolic, it
+        might be split into a tracking ping and a search ping); the receive
+        chain has a beamformer in front of the matched filter (because the
+        transducer is actually an array, not a single hydrophone, and you want
+        bearing as well as range); the CFAR is replaced with something that
+        also handles clutter edges and multiple-target windows; the operator
+        gets to draw boxes on the RD map to mark contacts of interest. But the
+        spine — pressure wave, echo, time-of-flight gives range, bandwidth
+        gives resolution, matched filter gives processing gain, slow-time FFT
+        gives Doppler, threshold gives a binary decision — that spine is
+        everything in this essay, and that spine has been the same since the
+        1950s.
+      </p>
+
+      <p>
+        The thing that keeps changing is what's <em>around</em> the pipeline.
+        Sea-state estimation. Adaptive arrays. Tracking algorithms that follow
+        a contact across many ping cycles. Bistatic operation, where one ship
+        transmits and another receives. Matched-field processing that exploits
+        ocean-acoustic channel structure to localise targets directly without
+        the range-Doppler intermediate step. Each of those is a research
+        career on its own, and each of them sits on top of the diagram you
+        just watched run. The hardest, slowest, most fundamental ideas are at
+        the bottom; the work on top stands on a fairly small number of them.
+      </p>
+
+      <p>
+        You now know what those ideas are.
+      </p>
+    </section>
+
     <footer class="essay-foot">
       <p>
-        This essay is being written one block of figures at a time. The sections
-        coming next — range resolution, the chirp trick, matched filtering,
-        Doppler, range–Doppler maps, CFAR detection — get added as they ship. See
-        <a href="PLAN.md">PLAN.md</a> for the full outline.
+        This essay is the JavaScript-only sibling of the
+        <a href="../">interactive Pyodide-backed Quarto report</a> at
+        <code>/dsp_doc/</code>. Same DSP, different rendering philosophy: that
+        one runs Python in your browser; this one builds every figure with
+        a small custom JS DSP toolkit. No build step, no framework, no CDN.
       </p>
       <p>
-        Source: <a href="https://github.com/kejaed/dsp_doc">github.com/kejaed/dsp_doc</a>,
-        branch <code>ciechanow-style</code>.
+        Source: <a href="https://github.com/kejaed/dsp_doc">github.com/kejaed/dsp_doc</a>.
+        See <a href="PLAN.md">PLAN.md</a> for the original outline and notes on
+        the directory layout.
       </p>
     </footer>
 

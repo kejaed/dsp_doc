@@ -21,6 +21,7 @@ import * as fig16 from "./figures/16-coherent-integration.js";
 import * as fig17 from "./figures/17-rd-map.js";
 import * as fig18 from "./figures/18-detection-threshold.js";
 import * as fig19 from "./figures/19-cfar.js";
+import * as fig20 from "./figures/20-finale.js";
 
 const registry = {
   "pressure-wave": fig01,
@@ -42,6 +43,7 @@ const registry = {
   "rd-map": fig17,
   "detection-threshold": fig18,
   "cfar": fig19,
+  "finale": fig20,
 };
 
 function bootFigures() {
