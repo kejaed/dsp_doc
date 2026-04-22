@@ -482,6 +482,84 @@
       </p>
     </section>
 
+    <section>
+      <h2>A target on the move</h2>
+
+      <p>
+        If the target is moving toward or away from us at a radial speed <i>v</i>,
+        each cycle of the returning wave is squeezed (toward) or stretched (away)
+        relative to what we sent. The echo carrier shifts in frequency by
+      </p>
+
+      <p style="text-align: center; margin: 1.2rem 0; font-size: 1.15rem;">
+        <i>f</i><sub><i>d</i></sub>&nbsp;=&nbsp;−2·<i>v</i>·<i>f</i><sub><i>c</i></sub>/<i>c</i>.
+      </p>
+
+      <p>
+        The factor of two is because the wave makes the trip twice — out, then
+        back — and each leg picks up the same fractional Doppler. The minus sign
+        is a convention choice (we'll take positive <i>v</i> = receding, which
+        gives a downward shift). Plugging in numbers: at <i>f</i><sub><i>c</i></sub>
+        = 1 kHz, a target receding at 5 m/s shifts the echo by about −7 Hz. Small
+        in absolute terms; large enough to detect easily.
+      </p>
+
+      <figure class="scene" data-figure="doppler">
+        <figcaption>
+          A receding target. The transmit pulse (cool) goes out at <i>f</i><sub><i>c</i></sub>;
+          the echo (hot) comes back at <i>f</i><sub><i>c</i></sub>+<i>f</i><sub><i>d</i></sub>.
+          Drag the velocity slider; press <em>play tx + echo</em> to hear the pitch
+          difference. Negative velocities (approaching targets) raise the echo
+          pitch; positive velocities lower it.
+        </figcaption>
+      </figure>
+
+      <p>
+        The Doppler shift is simultaneously a problem and an opportunity. A
+        problem because the matched filter we just built was tuned to the exact
+        transmit frequency content — feed it a Doppler-shifted echo and the
+        correlation peak shrinks (the wiggles no longer line up exactly). An
+        opportunity because if we can <em>measure</em> <i>f</i><sub><i>d</i></sub>
+        we get the target's radial velocity for free, on top of its range.
+      </p>
+    </section>
+
+    <section>
+      <h2>The Doppler spectrum</h2>
+
+      <p>
+        Measuring <i>f</i><sub><i>d</i></sub> from the echo of a single short ping
+        is hard, because the ping itself only has so much frequency resolution
+        (uncertainty principle, again — its spectrum is roughly 1/τ wide). At τ
+        = 30 ms our spectrum is ~30 Hz wide. A ±5 Hz Doppler shift moves the
+        whole spectrum by less than a single FFT bin; you would not notice.
+      </p>
+
+      <p>
+        The figure below cheats a little to make the picture intuitive: it shows
+        the spectrum of a long, sustained tone burst at the <em>echo's</em>
+        frequency, so the spectral peak is narrow enough to see slide as you
+        adjust velocity.
+      </p>
+
+      <figure class="scene" data-figure="doppler-spectrum">
+        <figcaption>
+          The echo's spectrum, with a marker showing where the transmit frequency
+          sat. As the target's velocity changes, the echo line slides along the
+          frequency axis by <i>f</i><sub><i>d</i></sub> = −2<i>v</i>·<i>f</i><sub><i>c</i></sub>/<i>c</i>.
+          For a real, short ping you would not see this peak motion in a single
+          spectrum — the next section will explain how to get the resolution we need.
+        </figcaption>
+      </figure>
+
+      <p>
+        The trick to making Doppler measurable from short pings is to fire
+        <em>many</em> of them, evenly spaced in time, and use the long
+        observation interval to get the frequency resolution we lack within a
+        single ping. That's what the next three sections build up.
+      </p>
+    </section>
+
     <footer class="essay-foot">
       <p>
         This essay is being written one block of figures at a time. The sections

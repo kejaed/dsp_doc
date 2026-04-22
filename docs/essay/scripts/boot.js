@@ -14,6 +14,8 @@ import * as fig09 from "./figures/09-chirp.js";
 import * as fig10 from "./figures/10-spectrogram.js";
 import * as fig11 from "./figures/11-matched-filter.js";
 import * as fig12 from "./figures/12-mf-with-noise.js";
+import * as fig13 from "./figures/13-doppler.js";
+import * as fig14 from "./figures/14-doppler-spectrum.js";
 
 const registry = {
   "pressure-wave": fig01,
@@ -28,6 +30,8 @@ const registry = {
   "spectrogram": fig10,
   "matched-filter": fig11,
   "mf-with-noise": fig12,
+  "doppler": fig13,
+  "doppler-spectrum": fig14,
 };
 
 function bootFigures() {
