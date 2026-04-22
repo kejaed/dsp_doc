@@ -15,9 +15,10 @@ Long body of serif prose, ~25 hand-built canvas figures threaded
 through it, each with one or two sliders that let the reader poke at
 the physics. No code shown, no dropdowns, no library brand.
 
-This document lives in `essay/PLAN.md` on the `ciechanow-style`
-branch, separate from the current Quarto report (which stays alive
-under `docs/`).
+This document lives in `docs/essay/PLAN.md`. We commit the essay on
+`master` so GitHub Pages serves it at
+<https://kejaed.github.io/dsp_doc/essay/> from `master:/docs/essay/`,
+alongside the existing Quarto demo at `master:/docs/`.
 
 ## Tech stack (final)
 

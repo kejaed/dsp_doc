@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1000">
+  <title>Sonar — from the physics up</title>
+  <link rel="stylesheet" href="styles/essay.css">
+</head>
+<body>
+  <article>
+
+    <header class="title-block">
+      <h1>Sonar</h1>
+      <p class="subtitle">How a box on a boat knows there's a submarine four kilometres away, from first principles.</p>
+      <p class="byline">A long, slow read in twenty figures. Drag every slider.</p>
+    </header>
+
+    <aside class="audio-warning">
+      <strong>Audio warning.</strong> A handful of figures play sound — sonar pings, tones,
+      noise. Unmute your speakers when you're ready, and turn the volume to a comfortable
+      level before you press <em>play</em>.
+    </aside>
+
+    <section>
+      <p>
+        Imagine a steel ball dropped into a still pond. A round ridge of water races
+        outward from where it landed. The ridge carries no water with it — every drop in
+        the pond stays roughly where it was — only the <em>shape</em> of the surface
+        travels. When the ridge reaches the dock at the edge of the pond it slaps the
+        wood, bounces off, and races back the way it came. If you'd been timing it, you
+        could have measured the round trip and worked out how far the dock is.
+      </p>
+
+      <p>
+        That is, very nearly, sonar. There is no pond, no ball, and no wooden dock — but
+        underwater there are pressure waves, and there is a transducer that fires them,
+        and there are submarines and rocks and fish that bounce them back. Every step in
+        what follows is a slightly more careful version of the pond.
+      </p>
+
+      <p>
+        Before any of that, though, we have to be precise about what is actually
+        travelling between the transducer and the target. It is not water. It is a
+        <em>pressure wave</em>: a moving pattern of squeezes and stretches in the medium.
+        The figure below is a cartoon of one.
+      </p>
+
+      <figure class="scene" data-figure="pressure-wave">
+        <figcaption>
+          A travelling longitudinal wave. The blue dots are stand-ins for water
+          molecules — they oscillate back and forth along the wave's direction of travel
+          but do not actually go anywhere. What travels is the pattern of
+          <em>compressions</em> (where dots bunch up) and <em>rarefactions</em> (where
+          they spread out). The red curve below shows the pressure at each point right
+          now: peaks where dots crowd together, troughs where they thin out. Drag the
+          frequency slider and the wavelength shrinks; press <em>play tone</em> for the
+          audible counterpart.
+        </figcaption>
+      </figure>
+
+      <p>
+        Two things are worth noticing here. First, although the pattern is moving steadily
+        from left to right, no single dot ever drifts left or right — each one wobbles in
+        place. Sound is a way for energy and information to cross a medium without
+        carrying any of the medium with it. Second, the pressure profile is exactly the
+        spatial derivative of the displacement: where the dots are most squeezed, the
+        pressure is highest; where they are pulled apart, the pressure is lowest. We
+        will care about that pressure for the rest of the essay because it is what the
+        receiver actually measures.
+      </p>
+
+      <p>
+        From here on, we'll stop drawing the dots and just plot the pressure wave on
+        its own. But every line you see for the next hour is, underneath, a pattern of
+        squeezes and stretches travelling through water at about 1500 metres per
+        second.
+      </p>
+    </section>
+
+    <footer class="essay-foot">
+      <p>
+        This is Milestone 1 of an in-progress essay. The remaining nineteen sections —
+        speed of sound, ping timing, range resolution, the chirp trick, matched
+        filtering, Doppler, range–Doppler maps, CFAR detection — are stubs.
+        See <a href="PLAN.md">PLAN.md</a> for the full outline.
+      </p>
+      <p>
+        Source: <a href="https://github.com/kejaed/dsp_doc">github.com/kejaed/dsp_doc</a>,
+        branch <code>ciechanow-style</code>.
+      </p>
+    </footer>
+
+  </article>
+
+  <script type="module" src="scripts/boot.js"></script>
+</body>
+</html>
