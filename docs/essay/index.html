@@ -560,6 +560,112 @@
       </p>
     </section>
 
+    <section>
+      <h2>A train of pings</h2>
+
+      <p>
+        Modern sonars don't fire one ping; they fire a sequence — every PRI
+        seconds (PRI for <em>pulse repetition interval</em>) for as long as the
+        operator wants. Each ping comes back, the receiver matched-filters it,
+        and the result is one row in a stack of receive traces. Two natural axes
+        appear: <em>fast time</em> across each row (where in the row is the echo
+        — that's range), and <em>slow time</em> down the stack (which ping number
+        — that turns out to be Doppler).
+      </p>
+
+      <figure class="scene" data-figure="pulse-train">
+        <figcaption>
+          Top: the transmit timeline laid out flat — N pings spaced PRI apart,
+          with their corresponding red echoes. Bottom: the same data reorganised
+          as a matrix. Each row is one ping's receive trace; the echo column
+          stays put across all rows because the target is at a fixed range. This
+          matrix is the input to the next two figures.
+        </figcaption>
+      </figure>
+
+      <p>
+        At a fixed range bin (a vertical column of the matrix), the echo's value
+        from ping to ping is not constant — it picks up the inter-pulse Doppler
+        phase exp(<i>j</i> 2π <i>f</i><sub><i>d</i></sub> · <i>k</i> · PRI) for
+        the <i>k</i>-th ping. The rate at which that phase advances along the
+        slow-time axis <em>is</em> the Doppler frequency. We just need to do an
+        FFT down each column.
+      </p>
+    </section>
+
+    <section>
+      <h2>Coherent integration</h2>
+
+      <p>
+        Before doing the column FFT, here is a closely related trick that's worth
+        a figure of its own: <em>coherent averaging</em>. Sum the matched-filter
+        outputs from N pings (treating them as complex signals — phase and all)
+        and divide by N. The target peak is in the same place every time, so it
+        adds constructively; the noise has random phase, so it adds destructively.
+        After N pulses, target amplitude is unchanged; noise standard deviation
+        drops by √N. The peak-to-noise ratio improves by 10·log₁₀(N) dB.
+      </p>
+
+      <figure class="scene" data-figure="coherent-integration">
+        <figcaption>
+          Top: matched-filter output from a single noisy ping — the target is
+          weak. Bottom: coherent average of N independent realisations of the
+          same scene. Slide N from 1 to 64; the target peak rises by 18 dB
+          (= 10·log₁₀ 64) above the noise while the noise floor itself slowly
+          settles. Same trick a long-exposure camera uses: noise averages, the
+          signal builds.
+        </figcaption>
+      </figure>
+
+      <p>
+        Coherent integration is what we get for stacking pings that all look the
+        same. But pings from a <em>moving</em> target don't all look the same —
+        they have a slowly rotating phase. If we could un-rotate them and then
+        sum, we'd get the same gain. The way to do that, for an unknown
+        velocity, is to try every plausible Doppler shift simultaneously, which
+        is just an FFT.
+      </p>
+    </section>
+
+    <section>
+      <h2>The range–Doppler map</h2>
+
+      <p>
+        The combination of "stack N pings" and "FFT each column" produces the
+        <em>range–Doppler map</em>: a 2-D image with range across, radial
+        velocity up, and brightness equal to how much energy is at that
+        range-velocity cell. A target at (<i>R</i><sub>0</sub>, <i>v</i>) shows
+        up as a bright dot at the corresponding pixel; everywhere else the map
+        is just integrated noise.
+      </p>
+
+      <figure class="scene" data-figure="rd-map">
+        <figcaption>
+          The range–Doppler map. Move the target slider; the bright spot moves
+          with it. The white circle shows where the target actually is — it
+          should sit on top of the brightness peak. Increasing N raises the
+          peak above the noise floor; increasing PRI improves Doppler
+          resolution at the cost of range ambiguity.
+        </figcaption>
+      </figure>
+
+      <p>
+        Notice that PRI and bandwidth play parallel roles for Doppler and range:
+        bandwidth × duration sets fast-time (range) resolution, and N · PRI
+        (the total observation time) sets slow-time (Doppler) resolution. The
+        rest of sonar engineering is largely a fight between these two — fine
+        Doppler wants long observation, fine range wants wide bandwidth, and
+        you can never have everything you want.
+      </p>
+
+      <p>
+        With the RD map, we know <em>where</em> a target is in the
+        range-velocity grid if there is one. The remaining question is: how
+        bright does a cell have to be before we believe it's actually a target
+        and not a noise fluctuation?
+      </p>
+    </section>
+
     <footer class="essay-foot">
       <p>
         This essay is being written one block of figures at a time. The sections

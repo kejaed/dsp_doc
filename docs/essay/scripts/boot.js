@@ -16,6 +16,9 @@ import * as fig11 from "./figures/11-matched-filter.js";
 import * as fig12 from "./figures/12-mf-with-noise.js";
 import * as fig13 from "./figures/13-doppler.js";
 import * as fig14 from "./figures/14-doppler-spectrum.js";
+import * as fig15 from "./figures/15-pulse-train.js";
+import * as fig16 from "./figures/16-coherent-integration.js";
+import * as fig17 from "./figures/17-rd-map.js";
 
 const registry = {
   "pressure-wave": fig01,
@@ -32,6 +35,9 @@ const registry = {
   "mf-with-noise": fig12,
   "doppler": fig13,
   "doppler-spectrum": fig14,
+  "pulse-train": fig15,
+  "coherent-integration": fig16,
+  "rd-map": fig17,
 };
 
 function bootFigures() {
