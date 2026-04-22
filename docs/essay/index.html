@@ -77,12 +77,191 @@
       </p>
     </section>
 
+    <section>
+      <h2>How fast it travels</h2>
+
+      <p>
+        That "about 1500 metres per second" needs a minute of context. Sound in water
+        is roughly four and a half times faster than sound in air — quickly enough
+        that a ping fired at a submarine 1.5 km away returns in two seconds. The
+        exact number depends mildly on the temperature, salinity, and pressure of the
+        water the ping is travelling through, but the dependence is gentle: in the
+        upper ocean, the speed sits somewhere between 1440 and 1540 m/s.
+      </p>
+
+      <p>
+        In the figure, a transducer at the centre fires a single ping. The red ring
+        is the wavefront — a two-dimensional slice through the three-dimensional
+        pressure shell expanding around the source. It travels outward at speed
+        <i>c</i>. Drag the temperature slider; in warmer water, <i>c</i> goes up a
+        bit and the ring races out slightly faster.
+      </p>
+
+      <figure class="scene" data-figure="speed-of-sound">
+        <figcaption>
+          A ping expanding from a point source at the speed of sound. Grid rings are
+          one kilometre apart. Warmer water is a little faster; even at 30 °C we're
+          still talking about ~1545 m/s. Compare that to light at
+          300 000 000 m/s — sonar is a game of seconds, not nanoseconds.
+        </figcaption>
+      </figure>
+
+      <p>
+        Everything that follows assumes a single value for <i>c</i>. Real sonar has
+        to cope with <i>c</i> varying with depth (which bends rays in a way that can
+        hide submarines under a thermocline), but that is its own essay.
+      </p>
+    </section>
+
+    <section>
+      <h2>A single ping</h2>
+
+      <p>
+        The simplest possible ping is a brief burst of a single tone — a sine wave
+        turned on for a few milliseconds and then turned off. Here is one:
+      </p>
+
+      <figure class="scene" data-figure="ping">
+        <figcaption>
+          Left: an 800 Hz tone burst of duration τ. Right: its magnitude spectrum.
+          Shorten τ and the burst becomes more of a click; the spectrum correspondingly
+          widens, because packing the same oscillation into less time forces the signal
+          to contain more frequency content. This tradeoff between time concentration
+          and frequency concentration is going to matter a lot.
+        </figcaption>
+      </figure>
+
+      <p>
+        Two observations, each of which will come back:
+      </p>
+
+      <p>
+        <strong>The spectrum is roughly 1/τ wide.</strong> A 10 ms burst is about
+        100 Hz wide at the base; a 100 ms burst is about 10 Hz wide. That's not a
+        coincidence — it is the fundamental uncertainty principle of signal
+        processing, a purely mathematical statement that applies to every waveform
+        that ever existed. Make it short in time, it spreads in frequency. Make it
+        narrow in frequency, it has to be long in time.
+      </p>
+
+      <p>
+        <strong>A tone burst is a terrible sonar pulse.</strong> It is either too
+        short (almost no energy in the water — you can't hear it come back) or too
+        long (can't tell two close echoes apart — more on this in a minute). We will
+        keep using tone bursts for a few more figures because they're simple, and
+        then replace them with something cleverer.
+      </p>
+    </section>
+
+    <section>
+      <h2>Echoes from a target</h2>
+
+      <p>
+        Put a hard object in the ping's path — a rock, a hull, a fish with a swim
+        bladder — and some fraction of the energy bounces back. If the target is at
+        range <i>R</i><sub>0</sub>, the wave takes <i>R</i><sub>0</sub>/<i>c</i>
+        seconds to reach it, another <i>R</i><sub>0</sub>/<i>c</i> to come back, and
+        returns to the transducer at a round-trip time of
+        τ<sub><i>d</i></sub> = 2<i>R</i><sub>0</sub>/<i>c</i>.
+      </p>
+
+      <figure class="scene" data-figure="echo">
+        <figcaption>
+          Press <em>fire ping</em>. A pulse travels out at <i>c</i>, reflects off the
+          red target at range <i>R</i><sub>0</sub>, and comes back. The bottom panel
+          is the transducer's own record of everything that crosses it: first the
+          outgoing burst, then (later) the echo. The gap between them is τ<sub><i>d</i></sub>.
+        </figcaption>
+      </figure>
+
+      <p>
+        The whole game of active sonar is encoded in this figure. If you can measure
+        τ<sub><i>d</i></sub> accurately, you can solve for <i>R</i><sub>0</sub>. If
+        you can measure how the echo <em>differs</em> from the outgoing pulse — its
+        frequency content, its time spread, its amplitude — you can also infer
+        whether the target is moving, how big it is, what it might be made of.
+        Everything else in this essay is a refinement of either the "measure
+        τ<sub><i>d</i></sub>" step or the "measure how the echo differs" step.
+      </p>
+    </section>
+
+    <section>
+      <h2>Range from time of flight</h2>
+
+      <p>
+        Let's do the first one right now. Below is a recording of a transducer: one
+        outgoing burst at <i>t</i>&nbsp;=&nbsp;0, and somewhere later in the trace,
+        an echo. Drag the dashed ruler until it lines up with the echo. The readout
+        tells you the implied range
+        <i>R</i>&nbsp;=&nbsp;<i>c</i>·<i>t</i>/2.
+      </p>
+
+      <figure class="scene" data-figure="time-of-flight">
+        <figcaption>
+          Measure the round-trip time, divide by two, multiply by the speed of
+          sound. That is the entire range-finding algorithm.
+        </figcaption>
+      </figure>
+
+      <p>
+        Two small catches, though. One is that you have to know which blip is the
+        echo — the trace has faint random wiggles in it (noise) and possibly
+        reflections from other objects. The other is that your ability to pin down
+        <i>t</i> precisely is limited by how sharp the echo is, which is limited by
+        the pulse shape. We'll come back to both.
+      </p>
+    </section>
+
+    <section>
+      <h2>Spreading and absorption</h2>
+
+      <p>
+        The echo you measured in the last figure was marked confidently on the
+        page, but in the water it is <em>very</em> quiet. Two effects conspire to
+        weaken an acoustic pulse as it travels:
+      </p>
+
+      <p>
+        <strong>Spreading.</strong> The ping's energy is shared over a shell whose
+        area grows as <i>R</i>². By the time the shell reaches 1 km, its surface area
+        is a million times the area at 1 m. Pressure amplitude drops like 1/<i>R</i>,
+        which in decibels is 20 log₁₀ <i>R</i>: a 20 dB loss per decade of range, before
+        you've even considered the water itself.
+      </p>
+
+      <p>
+        <strong>Absorption.</strong> The water molecules themselves convert some of
+        the acoustic energy to heat via a handful of relaxation mechanisms (boron,
+        magnesium sulphate, pure water viscosity). Thorp's formula is a convenient
+        curve fit: a frequency-dependent coefficient α(<i>f</i>), in dB per
+        kilometre, that you add to the spreading loss. The catch is that α grows
+        quickly with frequency.
+      </p>
+
+      <figure class="scene" data-figure="spreading">
+        <figcaption>
+          Total one-way transmission loss against range, for a carrier you can
+          sweep. The grey reference curve is pure spherical spreading; the red curve
+          is spreading plus Thorp absorption at the chosen frequency. Below about
+          1 kHz the two are indistinguishable. Above 10 kHz, absorption dominates
+          past a kilometre or two.
+        </figcaption>
+      </figure>
+
+      <p>
+        This is why long-range active sonar lives at low frequencies (hundreds of Hz
+        to a few kHz) and fish-finders or imaging sonars live up in the tens of kHz
+        or higher: they trade range for resolution. Spoiler: the reason higher
+        frequencies give better resolution is coming up next.
+      </p>
+    </section>
+
     <footer class="essay-foot">
       <p>
-        This is Milestone 1 of an in-progress essay. The remaining nineteen sections —
-        speed of sound, ping timing, range resolution, the chirp trick, matched
-        filtering, Doppler, range–Doppler maps, CFAR detection — are stubs.
-        See <a href="PLAN.md">PLAN.md</a> for the full outline.
+        This essay is being written one block of figures at a time. The sections
+        coming next — range resolution, the chirp trick, matched filtering,
+        Doppler, range–Doppler maps, CFAR detection — get added as they ship. See
+        <a href="PLAN.md">PLAN.md</a> for the full outline.
       </p>
       <p>
         Source: <a href="https://github.com/kejaed/dsp_doc">github.com/kejaed/dsp_doc</a>,

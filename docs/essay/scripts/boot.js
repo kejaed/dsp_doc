@@ -3,9 +3,19 @@
 // the registry and call its mount(rootEl) once.
 
 import * as fig01 from "./figures/01-pressure.js";
+import * as fig02 from "./figures/02-speed-of-sound.js";
+import * as fig03 from "./figures/03-ping.js";
+import * as fig04 from "./figures/04-echo.js";
+import * as fig05 from "./figures/05-time-of-flight.js";
+import * as fig06 from "./figures/06-spreading.js";
 
 const registry = {
   "pressure-wave": fig01,
+  "speed-of-sound": fig02,
+  "ping": fig03,
+  "echo": fig04,
+  "time-of-flight": fig05,
+  "spreading": fig06,
 };
 
 function bootFigures() {
