@@ -77,12 +77,417 @@
       </p>
     </section>
 
+    <section>
+      <h2>How fast it travels</h2>
+
+      <p>
+        That "about 1500 metres per second" needs a minute of context. Sound in water
+        is roughly four and a half times faster than sound in air — quickly enough
+        that a ping fired at a submarine 1.5 km away returns in two seconds. The
+        exact number depends mildly on the temperature, salinity, and pressure of the
+        water the ping is travelling through, but the dependence is gentle: in the
+        upper ocean, the speed sits somewhere between 1440 and 1540 m/s.
+      </p>
+
+      <p>
+        In the figure, a transducer at the centre fires a single ping. The red ring
+        is the wavefront — a two-dimensional slice through the three-dimensional
+        pressure shell expanding around the source. It travels outward at speed
+        <i>c</i>. Drag the temperature slider; in warmer water, <i>c</i> goes up a
+        bit and the ring races out slightly faster.
+      </p>
+
+      <figure class="scene" data-figure="speed-of-sound">
+        <figcaption>
+          A ping expanding from a point source at the speed of sound. Grid rings are
+          one kilometre apart. Warmer water is a little faster; even at 30 °C we're
+          still talking about ~1545 m/s. Compare that to light at
+          300 000 000 m/s — sonar is a game of seconds, not nanoseconds.
+        </figcaption>
+      </figure>
+
+      <p>
+        Everything that follows assumes a single value for <i>c</i>. Real sonar has
+        to cope with <i>c</i> varying with depth (which bends rays in a way that can
+        hide submarines under a thermocline), but that is its own essay.
+      </p>
+    </section>
+
+    <section>
+      <h2>A single ping</h2>
+
+      <p>
+        The simplest possible ping is a brief burst of a single tone — a sine wave
+        turned on for a few milliseconds and then turned off. Here is one:
+      </p>
+
+      <figure class="scene" data-figure="ping">
+        <figcaption>
+          Left: an 800 Hz tone burst of duration τ. Right: its magnitude spectrum.
+          Shorten τ and the burst becomes more of a click; the spectrum correspondingly
+          widens, because packing the same oscillation into less time forces the signal
+          to contain more frequency content. This tradeoff between time concentration
+          and frequency concentration is going to matter a lot.
+        </figcaption>
+      </figure>
+
+      <p>
+        Two observations, each of which will come back:
+      </p>
+
+      <p>
+        <strong>The spectrum is roughly 1/τ wide.</strong> A 10 ms burst is about
+        100 Hz wide at the base; a 100 ms burst is about 10 Hz wide. That's not a
+        coincidence — it is the fundamental uncertainty principle of signal
+        processing, a purely mathematical statement that applies to every waveform
+        that ever existed. Make it short in time, it spreads in frequency. Make it
+        narrow in frequency, it has to be long in time.
+      </p>
+
+      <p>
+        <strong>A tone burst is a terrible sonar pulse.</strong> It is either too
+        short (almost no energy in the water — you can't hear it come back) or too
+        long (can't tell two close echoes apart — more on this in a minute). We will
+        keep using tone bursts for a few more figures because they're simple, and
+        then replace them with something cleverer.
+      </p>
+    </section>
+
+    <section>
+      <h2>Echoes from a target</h2>
+
+      <p>
+        Put a hard object in the ping's path — a rock, a hull, a fish with a swim
+        bladder — and some fraction of the energy bounces back. If the target is at
+        range <i>R</i><sub>0</sub>, the wave takes <i>R</i><sub>0</sub>/<i>c</i>
+        seconds to reach it, another <i>R</i><sub>0</sub>/<i>c</i> to come back, and
+        returns to the transducer at a round-trip time of
+        τ<sub><i>d</i></sub> = 2<i>R</i><sub>0</sub>/<i>c</i>.
+      </p>
+
+      <figure class="scene" data-figure="echo">
+        <figcaption>
+          Press <em>fire ping</em>. A pulse travels out at <i>c</i>, reflects off the
+          red target at range <i>R</i><sub>0</sub>, and comes back. The bottom panel
+          is the transducer's own record of everything that crosses it: first the
+          outgoing burst, then (later) the echo. The gap between them is τ<sub><i>d</i></sub>.
+        </figcaption>
+      </figure>
+
+      <p>
+        The whole game of active sonar is encoded in this figure. If you can measure
+        τ<sub><i>d</i></sub> accurately, you can solve for <i>R</i><sub>0</sub>. If
+        you can measure how the echo <em>differs</em> from the outgoing pulse — its
+        frequency content, its time spread, its amplitude — you can also infer
+        whether the target is moving, how big it is, what it might be made of.
+        Everything else in this essay is a refinement of either the "measure
+        τ<sub><i>d</i></sub>" step or the "measure how the echo differs" step.
+      </p>
+    </section>
+
+    <section>
+      <h2>Range from time of flight</h2>
+
+      <p>
+        Let's do the first one right now. Below is a recording of a transducer: one
+        outgoing burst at <i>t</i>&nbsp;=&nbsp;0, and somewhere later in the trace,
+        an echo. Drag the dashed ruler until it lines up with the echo. The readout
+        tells you the implied range
+        <i>R</i>&nbsp;=&nbsp;<i>c</i>·<i>t</i>/2.
+      </p>
+
+      <figure class="scene" data-figure="time-of-flight">
+        <figcaption>
+          Measure the round-trip time, divide by two, multiply by the speed of
+          sound. That is the entire range-finding algorithm.
+        </figcaption>
+      </figure>
+
+      <p>
+        Two small catches, though. One is that you have to know which blip is the
+        echo — the trace has faint random wiggles in it (noise) and possibly
+        reflections from other objects. The other is that your ability to pin down
+        <i>t</i> precisely is limited by how sharp the echo is, which is limited by
+        the pulse shape. We'll come back to both.
+      </p>
+    </section>
+
+    <section>
+      <h2>Spreading and absorption</h2>
+
+      <p>
+        The echo you measured in the last figure was marked confidently on the
+        page, but in the water it is <em>very</em> quiet. Two effects conspire to
+        weaken an acoustic pulse as it travels:
+      </p>
+
+      <p>
+        <strong>Spreading.</strong> The ping's energy is shared over a shell whose
+        area grows as <i>R</i>². By the time the shell reaches 1 km, its surface area
+        is a million times the area at 1 m. Pressure amplitude drops like 1/<i>R</i>,
+        which in decibels is 20 log₁₀ <i>R</i>: a 20 dB loss per decade of range, before
+        you've even considered the water itself.
+      </p>
+
+      <p>
+        <strong>Absorption.</strong> The water molecules themselves convert some of
+        the acoustic energy to heat via a handful of relaxation mechanisms (boron,
+        magnesium sulphate, pure water viscosity). Thorp's formula is a convenient
+        curve fit: a frequency-dependent coefficient α(<i>f</i>), in dB per
+        kilometre, that you add to the spreading loss. The catch is that α grows
+        quickly with frequency.
+      </p>
+
+      <figure class="scene" data-figure="spreading">
+        <figcaption>
+          Total one-way transmission loss against range, for a carrier you can
+          sweep. The grey reference curve is pure spherical spreading; the red curve
+          is spreading plus Thorp absorption at the chosen frequency. Below about
+          1 kHz the two are indistinguishable. Above 10 kHz, absorption dominates
+          past a kilometre or two.
+        </figcaption>
+      </figure>
+
+      <p>
+        This is why long-range active sonar lives at low frequencies (hundreds of Hz
+        to a few kHz) and fish-finders or imaging sonars live up in the tens of kHz
+        or higher: they trade range for resolution. Spoiler: the reason higher
+        frequencies give better resolution is coming up next.
+      </p>
+    </section>
+
+    <section>
+      <h2>The resolution problem</h2>
+
+      <p>
+        Suppose two targets sit close together — say a couple of dozen metres apart.
+        Each one returns its own echo. The transducer doesn't know there are two of
+        them; it just sees the sum of two pulses arriving back-to-back. If the pulse
+        is short, the two echoes arrive cleanly separated in time and you can count
+        them. If the pulse is long, they overlap, and what you see is one fat blob.
+      </p>
+
+      <figure class="scene" data-figure="resolution-problem">
+        <figcaption>
+          Sum of two echoes from two equal-strength targets. Sliding the
+          <em>separation</em> closer together or the <em>pulse duration</em> longer
+          merges them into a single peak. The rule of thumb: you can resolve two
+          echoes only when their round-trip-time difference exceeds the pulse
+          duration. Translated to range, that's <i>Δr</i> = <i>c</i>·τ/2.
+        </figcaption>
+      </figure>
+
+      <p>
+        So the obvious move is to use a very short pulse. Make τ tiny and you can
+        resolve targets that are inches apart. But there's the catch we already met
+        in §3: a pulse that is short in time is wide in frequency, and short in time
+        also means it carries very little energy. We can't actually transmit a delta
+        function and hope to hear its echo; the receiver would just see noise. What
+        we actually want is a pulse that is <em>simultaneously</em> long in duration
+        (so it carries energy) and broad in bandwidth (so it resolves close
+        targets). That sounds like a contradiction. It isn't, quite, and the next
+        section explains the way out.
+      </p>
+    </section>
+
+    <section>
+      <h2>Bandwidth IS resolution</h2>
+
+      <p>
+        Here is the cleaner way to state the resolution rule. After we've done the
+        right processing on the receive side (the matched filter, which we'll meet
+        in §11), the achievable range resolution is set entirely by the pulse's
+        <em>bandwidth</em> <i>B</i>:
+      </p>
+
+      <p style="text-align: center; margin: 1.2rem 0; font-size: 1.15rem;">
+        <i>Δr</i>&nbsp;=&nbsp;<i>c</i>&nbsp;/&nbsp;(2<i>B</i>).
+      </p>
+
+      <p>
+        That's it. Whatever shape the pulse has, however long or short it is, what
+        matters at the end is how much frequency it spans. A pulse with 1 kHz of
+        bandwidth gives 75 cm of resolution in water; 10 kHz gives 7.5 cm; 100 Hz
+        gives 7.5 m. The same figure as before, but now the slider is bandwidth and
+        the bracket on the plot shows you <i>Δr</i> directly.
+      </p>
+
+      <figure class="scene" data-figure="bandwidth">
+        <figcaption>
+          Two close targets after matched filtering with a pulse of bandwidth <i>B</i>.
+          The blue trace is the resulting magnitude — each target compressed to a
+          sinc-shaped main lobe of width <i>Δr</i> = <i>c</i>/(2<i>B</i>). When the
+          target separation drops below <i>Δr</i> the peaks merge.
+        </figcaption>
+      </figure>
+
+      <p>
+        So we want bandwidth. Lots of it. And we still want enough total energy to
+        survive the trip out to the target and back. The trick is the chirp.
+      </p>
+    </section>
+
+    <section>
+      <h2>The chirp trick</h2>
+
+      <p>
+        Instead of holding a single tone for τ seconds, sweep the frequency
+        smoothly from <i>f</i><sub>0</sub> to <i>f</i><sub>0</sub>+<i>B</i> over
+        the same τ. The resulting waveform is called a <em>linear-FM chirp</em>,
+        or LFM. It looks like a long, smooth squeak that rises (or falls) in pitch.
+        Birds use them. Bats use them. Submarines use them.
+      </p>
+
+      <figure class="scene" data-figure="chirp">
+        <figcaption>
+          Top: a real LFM chirp in time. Bottom: its magnitude spectrum, occupying
+          the full band <i>f</i><sub>0</sub> to <i>f</i><sub>0</sub>+<i>B</i>.
+          The interesting number is the <em>time-bandwidth product</em> <i>B</i>·τ.
+          A 1 ms tone has <i>B</i>·τ ≈ 1; a 30 ms chirp covering 1 kHz has
+          <i>B</i>·τ = 30. Press <em>play chirp</em> for the audio version.
+        </figcaption>
+      </figure>
+
+      <p>
+        The chirp gives us both: <i>τ</i> can be long (carrying lots of energy)
+        <em>and</em> <i>B</i> can be large (giving fine range resolution after
+        processing). The processing that turns the long, slow squeak into a sharp
+        peak is the matched filter, which gets its own section in a moment. First,
+        a way of seeing what's actually happening to the chirp's frequency over
+        time.
+      </p>
+    </section>
+
+    <section>
+      <h2>A spectrogram of the chirp</h2>
+
+      <p>
+        A spectrogram is a way of plotting a signal as a heatmap with time across
+        and frequency up. It's just a stack of short-time spectra computed every
+        few milliseconds, glued together; the colour of each pixel is "how much
+        energy is at this frequency at this time". For a tone, the spectrogram is
+        a horizontal stripe. For a chirp, it's a tilted line — the slope of the
+        line is exactly <i>B</i>/τ.
+      </p>
+
+      <figure class="scene" data-figure="spectrogram">
+        <figcaption>
+          The chirp on a time–frequency plane. Drag <em>bandwidth</em>; the
+          diagonal tilts. Time-bandwidth product is the area of the rectangle the
+          chirp's diagonal cuts diagonally across — which is also, not by
+          coincidence, the matched-filter processing gain we're about to extract.
+        </figcaption>
+      </figure>
+
+      <p>
+        We have spent five sections on what to <em>send</em>. The remainder of the
+        essay is about what to do with what comes <em>back</em>.
+      </p>
+    </section>
+
+    <section>
+      <h2>The matched filter</h2>
+
+      <p>
+        We send a long chirp to put energy in the water; we want a short, sharp peak
+        on the receive side so we can pin down the target's range to within a metre
+        or two. The piece of mathematics that does that conversion is the
+        <em>matched filter</em>. It is the most important idea in this essay, and
+        once you've seen it work, you understand most of why active sonar exists in
+        its modern form at all.
+      </p>
+
+      <p>
+        The matched filter is, simply, a cross-correlation of the received signal
+        with a copy of the transmit waveform. Slide the reference chirp along the
+        receive trace; at each shift, multiply the two point-by-point and sum. When
+        the shift lines up exactly with the actual delay of the echo, every wiggle
+        in the echo lines up with the corresponding wiggle in the reference, the
+        products are all positive, and the sum is huge. At any other shift, the
+        wiggles are misaligned and the products mostly cancel — the sum is tiny.
+        The output of the cross-correlation, as a function of shift, has one big
+        spike where the echo actually lives and is small everywhere else.
+      </p>
+
+      <figure class="scene" data-figure="matched-filter">
+        <figcaption>
+          Three traces. Top: the transmit chirp itself — a long, smeared waveform.
+          Middle: the receive trace, which contains a single delayed copy of that
+          chirp at the target's range. Bottom: the matched-filter output. The
+          long, smeared echo has been replaced by a single sharp peak right at
+          the dashed marker. Drag the target range slider; both the echo and the
+          peak slide together.
+        </figcaption>
+      </figure>
+
+      <p>
+        Notice three things. First, the peak in the bottom plot is at the
+        target's true delay, regardless of what the input looks like. Second, the
+        peak's <em>width</em> is set by the chirp's bandwidth, not its duration —
+        which is exactly the bandwidth-equals-resolution claim from §8 finally
+        delivered. Third, the area under the spike is the same as the area under
+        the long echo before processing — the matched filter rearranges energy
+        from a long, low pulse into a short, tall one. It doesn't manufacture
+        energy; it just concentrates it.
+      </p>
+    </section>
+
+    <section>
+      <h2>What noise does</h2>
+
+      <p>
+        So far the receiver has been quiet — only the echo, only the target. In
+        practice, every receiver hears a low background of random pressure
+        fluctuations: the ocean's own noise (waves, biology, ships), the
+        electronic noise floor of the amplifier, and so on. We model all of that
+        as a Gaussian random process added to the received signal.
+      </p>
+
+      <p>
+        This is where the matched filter starts to look like magic. The bottom
+        slider controls the input SNR: positive numbers mean the echo dominates
+        the noise; negative numbers mean the noise dominates the echo. At low SNR
+        the raw receive trace looks like static — you can't pick out the chirp by
+        eye at all. But the matched-filter output below it still has the target
+        peak.
+      </p>
+
+      <figure class="scene" data-figure="mf-with-noise">
+        <figcaption>
+          Top: the receive trace with the echo buried under noise. Bottom: the
+          matched-filter output. Drop the input SNR to −15 dB or below — the
+          target is invisible up top but the peak is still resolvable in the MF
+          output. The processing gain is roughly 10 log₁₀(<i>B</i>·τ); for our
+          chirp that's about 14 dB of free SNR, on top of whatever the input
+          already had.
+        </figcaption>
+      </figure>
+
+      <p>
+        Why does this work? The matched filter is provably the optimal linear
+        operation for detecting a known waveform in white Gaussian noise — it
+        maximises the peak-output-SNR among all linear filters. The intuition is
+        that it weights every received sample by how much "signal" we expect to
+        see there, and it happens that the optimal weighting is just a copy of
+        the signal itself. There's a careful proof; for our purposes it's enough
+        to know that you cannot do better with a fixed pulse shape and a Gaussian
+        noise floor.
+      </p>
+
+      <p>
+        With the matched filter we have everything we need to find a stationary
+        target: send the chirp, correlate the echo with a reference, look for
+        a peak, read off its delay, divide by 2/<i>c</i>, and we have a range.
+        The next thing to ask is what happens if the target isn't stationary.
+      </p>
+    </section>
+
     <footer class="essay-foot">
       <p>
-        This is Milestone 1 of an in-progress essay. The remaining nineteen sections —
-        speed of sound, ping timing, range resolution, the chirp trick, matched
-        filtering, Doppler, range–Doppler maps, CFAR detection — are stubs.
-        See <a href="PLAN.md">PLAN.md</a> for the full outline.
+        This essay is being written one block of figures at a time. The sections
+        coming next — range resolution, the chirp trick, matched filtering,
+        Doppler, range–Doppler maps, CFAR detection — get added as they ship. See
+        <a href="PLAN.md">PLAN.md</a> for the full outline.
       </p>
       <p>
         Source: <a href="https://github.com/kejaed/dsp_doc">github.com/kejaed/dsp_doc</a>,
